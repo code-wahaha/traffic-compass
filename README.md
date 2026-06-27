@@ -110,4 +110,4 @@ python app.py
 
 ## 开源协议
 
-[MIT](./LICENSE) © 2026 流量罗盘
+[MIT](./LICENSE) © 2026 code-wahaha
