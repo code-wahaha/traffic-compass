@@ -1,0 +1,20 @@
+# 密钥与隐私（务必不要提交）
+webapp/_data/apikeys.json
+webapp/_data/chrome_data/
+.env
+
+# 运行产物
+records/
+*.log
+__pycache__/
+*.pyc
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# 杂项
+.DS_Store
+Thumbs.db
+NUL

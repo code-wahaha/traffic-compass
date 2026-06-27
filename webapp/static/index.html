@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>流量罗盘 · 发布前体检</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root{
+    --bg:#0a0a0b; --panel:#161618; --panel2:#1d1d20; --line:#2a2a2e;
+    --text:#ececf1; --dim:#8a8a93; --accent:#5b8cff;
+    --high:#ff5c5c; --mid:#ffb347; --low:#9aa0a6; --ok:#33d17a;
+  }
+  html,body{height:100%;}
+  body{ background:var(--bg); color:var(--text);
+    font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex; flex-direction:column; align-items:center; }
+  .wrap{ width:100%; max-width:860px; flex:1; display:flex; flex-direction:column;
+    padding:24px 16px 0; }
+  .hd{ text-align:center; padding:18px 0 6px; }
+  .hd h1{ font-size:20px; font-weight:600; letter-spacing:.5px; }
+  .hd p{ color:var(--dim); font-size:13px; margin-top:6px; }
+
+  #msgs{ flex:1; overflow-y:auto; padding:18px 4px 12px; display:flex; flex-direction:column; gap:16px; }
+  .msg{ max-width:92%; padding:14px 16px; border-radius:14px; font-size:14.5px; line-height:1.7; white-space:pre-wrap; word-break:break-word; }
+  .me{ align-self:flex-end; background:#243049; border:1px solid #31425f; }
+  .bot{ align-self:flex-start; background:var(--panel); border:1px solid var(--line); }
+  .empty{ color:var(--dim); text-align:center; margin:auto 0; font-size:15px; }
+
+  /* report */
+  .rep h3{ font-size:14px; margin:14px 0 8px; color:#cfd2dc; border-left:3px solid var(--accent); padding-left:8px;}
+  .rep h3:first-child{margin-top:0;}
+  table.hits{ width:100%; border-collapse:collapse; font-size:13px; margin:6px 0;}
+  table.hits td,table.hits th{ border:1px solid var(--line); padding:6px 8px; text-align:left;}
+  table.hits th{ color:var(--dim); font-weight:500;}
+  .tag{ display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; }
+  .t-high{ background:rgba(255,92,92,.15); color:var(--high);}
+  .t-mid{ background:rgba(255,179,71,.15); color:var(--mid);}
+  .t-low{ background:rgba(154,160,166,.15); color:var(--low);}
+  mark.hl-high{ background:rgba(255,92,92,.38); color:#fff; border-radius:3px; padding:0 1px;}
+  mark.hl-mid{ background:rgba(255,179,71,.32); color:#fff; border-radius:3px; padding:0 1px;}
+  mark.hl-low{ background:rgba(154,160,166,.30); color:#fff; border-radius:3px; padding:0 1px;}
+  .annot{ background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:14px; line-height:1.95; max-height:280px; overflow:auto; white-space:pre-wrap; word-break:break-word;}
+  .annot .none{ color:var(--ok);}
+  .verdict{ font-weight:600; padding:8px 10px; border-radius:8px; background:var(--panel2); margin:6px 0;}
+  .wl{ color:var(--ok); font-size:13px;}
+  .pred .rng{ font-size:18px; font-weight:600; color:#fff;}
+  .pred .sub{ color:var(--dim); font-size:13px; margin-top:4px;}
+  .disc{ color:var(--dim); font-size:12px; margin-top:8px; font-style:italic;}
+  ul.weak{ margin:6px 0 0 18px; font-size:13px;}
+  ul.weak li{ color:#e0b070; margin:2px 0;}
+  ul.good{ margin:6px 0 0 18px; font-size:13px;}
+  ul.good li{ color:#7fd6a0; margin:2px 0;}
+  .dims{ margin:8px 0;}
+  .dimrow{ display:flex; align-items:center; gap:8px; margin:3px 0; font-size:12.5px;}
+  .dimn{ width:46px; color:var(--dim);}
+  .dimbar{ flex:1; height:7px; background:var(--panel2); border-radius:4px; overflow:hidden;}
+  .dimbar i{ display:block; height:100%; background:linear-gradient(90deg,#5b8cff,#33d17a);}
+  .dimv{ width:26px; text-align:right; color:var(--dim);}
+
+  /* input card */
+  .inputwrap{ position:sticky; bottom:0; width:100%; padding:10px 0 22px; background:linear-gradient(transparent,var(--bg) 30%);}
+  .card{ background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:12px 14px;}
+  textarea#in{ width:100%; background:transparent; border:none; color:var(--text); font-size:15px;
+    resize:none; outline:none; min-height:46px; max-height:180px; font-family:inherit; line-height:1.6;}
+  textarea#in::placeholder{ color:#6a6a72;}
+  .row{ display:flex; align-items:center; gap:8px; margin-top:6px;}
+  .spacer{ flex:1;}
+  .ddwrap{ position:relative;}
+  .dd{ display:flex; align-items:center; gap:6px; background:var(--panel2); border:1px solid var(--line);
+    padding:6px 10px; border-radius:10px; cursor:pointer; font-size:13.5px; user-select:none;}
+  .dd .cv{ width:14px; height:14px; }
+  .menu{ position:absolute; bottom:42px; left:0; background:#0e0e10; border:1px solid var(--line);
+    border-radius:12px; padding:6px; min-width:180px; box-shadow:0 12px 40px rgba(0,0,0,.6); display:none;}
+  .menu.open{ display:block;}
+  .mi{ padding:9px 10px; border-radius:8px; font-size:14px; display:flex; align-items:center; justify-content:space-between; cursor:pointer;}
+  .mi:hover{ background:var(--panel2);}
+  .mi.dis{ color:#5a5a62; cursor:not-allowed;}
+  .mi .soon{ font-size:11px; color:#5a5a62;}
+  .mi.sel{ color:var(--accent);}
+  .iconbtn{ width:34px; height:34px; border-radius:9px; border:1px solid var(--line); background:var(--panel2);
+    color:var(--dim); cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center;}
+  .iconbtn:hover{ color:var(--text);}
+  .send{ background:var(--accent); border:none; color:#fff;}
+  .send:disabled{ opacity:.4; cursor:not-allowed;}
+
+  .params{ display:none; gap:10px 14px; flex-wrap:wrap; padding:10px 2px 2px; font-size:13px; color:var(--dim);}
+  .params.open{ display:flex;}
+  .params label{ display:flex; align-items:center; gap:5px;}
+  .params input[type=number],.params select{ background:var(--panel2); border:1px solid var(--line);
+    color:var(--text); border-radius:7px; padding:4px 7px; font-size:13px; width:88px;}
+  .params input[type=checkbox]{ accent-color:var(--accent);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hd">
+    <h1>🧭 流量罗盘</h1>
+    <p>发布前体检 —— 粘文案或视频链接，一键查违规 + 测流量潜力</p>
+  </div>
+
+  <div id="msgs"><div class="empty">选好平台，把文案粘进下面 👇</div></div>
+
+  <div class="inputwrap">
+    <div class="card">
+      <textarea id="in" placeholder="粘贴抖音视频文案，或视频分享链接…"></textarea>
+
+
+      <div class="row">
+        <div class="ddwrap">
+          <div class="dd" id="dd"><span id="ddname">抖音</span><span style="color:var(--dim)">▾</span></div>
+          <div class="menu" id="menu"></div>
+        </div>
+        <button class="iconbtn" id="attachBtn" title="上传文案文件（.txt）">📎</button>
+        <input type="file" id="file" accept=".txt,.md,text/plain" style="display:none">
+        <div class="spacer"></div>
+        <button class="iconbtn send" id="send" title="发送">→</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let platform = "douyin", platformName = "抖音";
+let lastReportCtx = "", chatHistory = [];
+
+// 平台下拉
+fetch("/api/platforms").then(r=>r.json()).then(j=>{
+  const menu = $("#menu");
+  menu.innerHTML = "";
+  (j.data||[]).forEach(p=>{
+    const d = document.createElement("div");
+    d.className = "mi" + (p.enabled?"":" dis") + (p.id===platform?" sel":"");
+    d.innerHTML = `<span>${p.name}</span>` + (p.enabled? (p.id===platform?'<span>✓</span>':'') : '<span class="soon">即将支持</span>');
+    if(p.enabled){ d.onclick = ()=>{ platform=p.id; platformName=p.name; $("#ddname").textContent=p.name; closeMenu(); buildMenu(j.data); }; }
+    menu.appendChild(d);
+  });
+  window._packs = j.data;
+});
+function buildMenu(data){ /* re-render selection marks */
+  const menu=$("#menu"); menu.innerHTML="";
+  data.forEach(p=>{
+    const d=document.createElement("div");
+    d.className="mi"+(p.enabled?"":" dis")+(p.id===platform?" sel":"");
+    d.innerHTML=`<span>${p.name}</span>`+(p.enabled?(p.id===platform?'<span>✓</span>':''):'<span class="soon">即将支持</span>');
+    if(p.enabled){ d.onclick=()=>{platform=p.id;platformName=p.name;$("#ddname").textContent=p.name;closeMenu();buildMenu(data);}; }
+    menu.appendChild(d);
+  });
+}
+const closeMenu=()=>$("#menu").classList.remove("open");
+$("#dd").onclick=e=>{e.stopPropagation();$("#menu").classList.toggle("open");};
+document.onclick=()=>closeMenu();
+$("#menu").onclick=e=>e.stopPropagation();
+
+// 附件
+$("#attachBtn").onclick=()=>$("#file").click();
+$("#file").onchange=e=>{ const f=e.target.files[0]; if(!f)return;
+  const rd=new FileReader(); rd.onload=()=>{ $("#in").value=rd.result; autresize(); }; rd.readAsText(f); };
+
+const ta=$("#in");
+function autresize(){ ta.style.height="auto"; ta.style.height=Math.min(ta.scrollHeight,180)+"px"; }
+ta.addEventListener("input",autresize);
+ta.addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();go();} });
+$("#send").onclick=go;
+
+function add(cls,html){ const m=$("#msgs"); const e=document.querySelector(".empty"); if(e)e.remove();
+  const d=document.createElement("div"); d.className="msg "+cls; d.innerHTML=html; m.appendChild(d); m.scrollTop=m.scrollHeight; return d; }
+const esc=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+async function go(){
+  const text=ta.value.trim(); if(!text)return;
+  add("me", esc(text));
+  ta.value=""; autresize();
+  const looksLink = /^https?:\/\//i.test(text) || /v\.douyin\.com|douyin\.com|xhslink|xiaohongshu/i.test(text);
+  const isNewWork = looksLink || !lastReportCtx || text.length>100;  // 新作品自查 vs 追问
+  const waiting=add("bot", isNewWork? "正在分析…" : "思考中…");
+  try{
+    if(isNewWork){
+      let content=text;
+      if(looksLink){
+        waiting.innerHTML="🔗 正在提取视频文案（约 30~90 秒）…";
+        const ex=await fetch("/api/extract",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({share_url:text})}).then(r=>r.json());
+        if(!ex.success){ waiting.innerHTML="🔗 "+esc(ex.message); return; }
+        content=ex.data.text;
+        add("bot","📄 已提取文案："+esc(content.slice(0,120))+(content.length>120?"…":""));
+      }
+      const j=await fetch("/api/audit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({platform, text:content})}).then(r=>r.json());
+      if(!j.success){ waiting.innerHTML="⚠️ "+esc(j.message); return; }
+      waiting.innerHTML=render(j.data);
+      lastReportCtx=buildCtx(j.data); chatHistory=[];
+      add("bot","<span style='color:var(--dim);font-size:13px'>💬 可继续追问：「帮我把违规的改成合规版」「为什么预测这么低」「前3秒怎么改更抓人」</span>");
+    } else {
+      chatHistory.push({role:"user",content:text});
+      const j=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:chatHistory, report_context:lastReportCtx})}).then(r=>r.json());
+      if(!j.success){ waiting.innerHTML="⚠️ "+esc(j.message); return; }
+      chatHistory.push({role:"assistant",content:j.data.reply});
+      waiting.innerHTML=esc(j.data.reply).replace(/\n/g,"<br>");
+    }
+  }catch(err){ waiting.innerHTML="⚠️ 请求失败："+esc(String(err)); }
+}
+function buildCtx(d){
+  const sc=d.score||{};
+  let c="平台:"+d.platform+"\n校正后文案:"+(d.corrected_text||"").slice(0,600);
+  c+="\n违规:"+((d.violations||[]).map(v=>v.text+"("+v.severity+":"+v.category+")").join("、")||"无");
+  c+="\n总评:"+d.verdict;
+  c+="\n流量潜力:"+(sc.total||0)+"% "+(sc.level||"")+" 维度"+JSON.stringify(sc.dims||{});
+  c+="\n亮点:"+((d.highlights||[]).join("；"))+"\n改进:"+((d.improvements||[]).join("；"));
+  return c;
+}
+
+function highlight(text, violations){
+  let h=esc(text||"");
+  const uniq={}, rank={high:3,mid:2,low:1};
+  (violations||[]).forEach(v=>{ const w=v.text; if(!w)return; if(!uniq[w]||rank[v.severity]>rank[uniq[w]]) uniq[w]=v.severity; });
+  Object.keys(uniq).sort((a,b)=>b.length-a.length).forEach(w=>{
+    const cls={high:"hl-high",mid:"hl-mid",low:"hl-low"}[uniq[w]]||"hl-low";
+    h=h.split(esc(w)).join(`<mark class="${cls}">${esc(w)}</mark>`);
+  });
+  return h;
+}
+const DIM_LABEL={hook:"钩子",collect:"收藏",freshness:"新鲜度",completion:"完播",topic:"选题",interact:"互动",follow:"关注"};
+const LEVEL_COLOR={"高潜力":"#33d17a","有潜力":"#5b8cff","一般":"#ffb347","难起量":"#ff5c5c"};
+function render(d){
+  const vs=d.violations||[], sc=d.score||{}, txt=d.corrected_text||"";
+  let h=`<div class="rep">`;
+  // 违规自查 —— 校正后原文标红
+  h+=`<h3>📋 违规自查（${esc(d.platform||"抖音")}）</h3>`;
+  h+=`<div class="annot">`+(vs.length? highlight(txt,vs) : `<span class="none">✅ 全文未命中违禁词</span>\n\n`+esc(txt))+`</div>`;
+  if(vs.length){
+    h+=`<table class="hits"><tr><th>命中</th><th>类别</th><th>严重度</th><th>为什么 / 怎么改</th></tr>`;
+    vs.forEach(v=>{ const t={high:"t-high",mid:"t-mid",low:"t-low"}[v.severity]||"t-low";
+      const lab={high:"🔴高",mid:"🟠中",low:"🟡低"}[v.severity]||"🟡";
+      const fix=[v.reason,v.suggest?("改："+v.suggest):"",v.note].filter(Boolean).map(esc).join("<br>");
+      h+=`<tr><td>${esc(v.text)}</td><td>${esc(v.category||"")}</td><td><span class="tag ${t}">${lab}</span></td><td>${fix}</td></tr>`; });
+    h+=`</table>`;
+  } else { h+=`<div class="wl">未命中违禁词 ✅</div>`; }
+  h+=`<div class="verdict">${esc(d.verdict||"")}</div>`;
+  // 流量潜力
+  h+=`<h3>📈 流量潜力（仅文案维度）</h3>`;
+  const lv=sc.level||"", col=LEVEL_COLOR[lv]||"#5b8cff";
+  h+=`<div class="pred"><div class="rng" style="color:${col}">流量潜力 ${sc.total||0}% · ${esc(lv)}</div>`;
+  if(sc.dims){ h+=`<div class="dims">`;
+    Object.keys(DIM_LABEL).forEach(k=>{ if(sc.dims[k]==null)return; const val=sc.dims[k];
+      h+=`<div class="dimrow"><span class="dimn">${DIM_LABEL[k]}</span><span class="dimbar"><i style="width:${val}%"></i></span><span class="dimv">${val}</span></div>`; });
+    h+=`</div>`; }
+  if(sc.summary) h+=`<div class="disc">${esc(sc.summary)}</div>`;
+  h+=`</div>`;
+  // 亮点 / 改进
+  if((d.highlights||[]).length){ h+=`<h3>✨ 亮点</h3><ul class="good">`+d.highlights.map(x=>`<li>${esc(x)}</li>`).join("")+`</ul>`; }
+  if((d.improvements||[]).length){ h+=`<h3>🔧 改进建议</h3><ul class="weak">`+d.improvements.map(x=>`<li>${esc(x)}</li>`).join("")+`</ul>`; }
+  h+=`</div>`;
+  return h;
+}
+</script>
+</body>
+</html>
