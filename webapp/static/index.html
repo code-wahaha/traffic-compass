@@ -342,7 +342,7 @@ async function go(){
       add("bot", btnHtml, true);
     } else {
       chatHistory.push({role:"user",content:text});
-      const j=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:chatHistory, report_context:lastReportCtx})}).then(r=>r.json());
+      const j=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:chatHistory, report_context:lastReportCtx, platform})}).then(r=>r.json());
       if(!j.success){ finishMsg(waiting,"bot","⚠️ "+esc(j.message)); return; }
       chatHistory.push({role:"assistant",content:j.data.reply});
       finishMsg(waiting,"bot",esc(j.data.reply).replace(/\n/g,"<br>"));
@@ -368,7 +368,7 @@ function highlight(text, violations){
   });
   return h;
 }
-const DIM_LABEL={hook:"钩子",collect:"收藏",freshness:"新鲜度",completion:"完播",topic:"选题",interact:"互动",follow:"关注"};
+const DIM_LABEL={hook:"钩子",title:"标题",collect:"收藏",freshness:"新鲜度",seo:"搜索",completion:"完播",read:"读完",topic:"选题",interact:"互动",follow:"关注"};
 const LEVEL_COLOR={"高潜力":"#33d17a","有潜力":"#5b8cff","一般":"#ffb347","难起量":"#ff5c5c"};
 function render(d){
   const vs=d.violations||[], sc=d.score||{}, txt=d.corrected_text||"";
@@ -581,7 +581,7 @@ async function postGo(){
   try{
     postChatHistory.push({role:"user",content:text});
     const j=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({messages:postChatHistory, report_context:buildPostCtx()})}).then(r=>r.json());
+      body:JSON.stringify({messages:postChatHistory, report_context:buildPostCtx(), platform})}).then(r=>r.json());
     if(!j.success){ waiting.innerHTML="⚠️ "+esc(j.message); return; }
     postChatHistory.push({role:"assistant",content:j.data.reply});
     const html=esc(j.data.reply).replace(/\n/g,"<br>");

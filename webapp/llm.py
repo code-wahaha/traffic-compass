@@ -5,22 +5,26 @@ import httpx
 import config
 from config import DEEPSEEK_HOST, DEEPSEEK_MODEL
 
-_SKILL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "audit_skill.md")
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# 平台 → 审核Skill 文件；没登记的平台回落到抖音版
+_SKILL_FILES = {"douyin": "audit_skill.md", "xiaohongshu": "xiaohongshu_skill.md"}
+_INPUT_LABEL = {"douyin": "口播文案", "xiaohongshu": "小红书笔记（第一行是标题）"}
 
 
-def _load_skill() -> str:
-    with open(_SKILL_PATH, encoding="utf-8") as f:
+def _load_skill(platform: str = "douyin") -> str:
+    fn = _SKILL_FILES.get(platform) or _SKILL_FILES["douyin"]
+    with open(os.path.join(_BASE_DIR, fn), encoding="utf-8") as f:
         return f.read()
 
 
-async def audit_full(text: str, candidates=None) -> dict:
+async def audit_full(text: str, candidates=None, platform: str = "douyin") -> dict:
     """一次 DeepSeek 调用：纠错 + 语境违规审核 + 流量潜力评分。返回结构化 dict。"""
-    user = "口播文案：\n" + (text or "")
+    user = _INPUT_LABEL.get(platform, "内容") + "：\n" + (text or "")
     if candidates:
         user += "\n\n【代码预扫到的疑似违禁词，请逐一在语境中复核，可推翻也可补充】：" + "、".join(candidates)
     payload = {
         "model": DEEPSEEK_MODEL,
-        "messages": [{"role": "system", "content": _load_skill()},
+        "messages": [{"role": "system", "content": _load_skill(platform)},
                      {"role": "user", "content": user}],
         "temperature": 0.3, "stream": False,
         "response_format": {"type": "json_object"},
@@ -37,6 +41,22 @@ async def audit_full(text: str, candidates=None) -> dict:
         except Exception as e:
             last_err = e
     raise last_err
+
+SYSTEM_XHS = """你是「小红书笔记合规与运营助手」。用户发小红书笔记前用你做自查与优化。已知小红书规则要点：
+
+【违禁词】广告法极限词（最/第一/100%/完美/闭眼入/必入等，营销语境违规）；医疗功效词（美白/祛痘/瘦身/根治，普通产品禁宣称）；引流词判罚全平台最重（微信/私信我/评论区扣1/薇/绿泡泡等暗语同罚，首次删笔记限流7天、三次永久封号）。
+【软广】品牌词≥3次+价格购买话术+只夸不踩=疑似软广限流；收钱合作必须走蒲公英报备；真实分享要优缺点都说。
+【AI标注】AI生成内容须在正文开头标注"本文由AI生成"，漏标首次限流7天、三次封号。
+【资质红线】无资质禁止：医疗诊断治疗、金融荐股保本、K12招生保过、法律咨询、减肥产品推荐。
+【流量逻辑】CES=点赞×1+收藏×1+评论×4+转发×4+关注×8；点击率(标题)是第一道门槛，收藏率是长尾发动机；35%流量来自搜索，关键词布局(标题前置+首段埋词+5-8个标签)吃长尾。
+
+你的任务：基于系统给你的"本篇笔记自查报告"，回答用户追问——
+1) 解释为什么会违规/被判软广/限流/评分低；
+2) 【改写=最小改动】只替换或删掉违规的那几个词，**其余原文一字不动**。保留博主的语气、emoji、分段习惯。绝对不要整段重写、不要变成营销号腔。优先用"哪个词→换成什么"的方式；
+3) 给具体的涨流量建议（标题、收藏点、关键词布局、标签）；
+4) 用户改完想重测时，提醒他重新发笔记自查。
+简洁、口语、直接给可用结果，别绕、别废话、别复述报告原文。"""
+
 
 SYSTEM = """你是「抖音作品合规与运营助手」。用户发抖音视频前用你做自查与优化。已知抖音规则要点：
 
@@ -123,8 +143,8 @@ async def predict_blind(text: str, account: dict) -> dict:
         return _json.loads(r.json()["choices"][0]["message"]["content"])
 
 
-async def chat(messages: list, report_context: str = "") -> str:
-    msgs = [{"role": "system", "content": SYSTEM}]
+async def chat(messages: list, report_context: str = "", platform: str = "douyin") -> str:
+    msgs = [{"role": "system", "content": SYSTEM_XHS if platform == "xiaohongshu" else SYSTEM}]
     if report_context:
         msgs.append({"role": "system", "content": "【本条作品的自查报告（你的回答要基于它）】\n" + report_context})
     msgs += messages

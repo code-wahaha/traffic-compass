@@ -67,10 +67,10 @@ async def audit(req: Request):
         pname = engine.load_pack(platform)["name"]
     except Exception:
         cand, pname = [], "抖音"
-    # DeepSeek 带审核Skill：纠错 + 语境违规 + 流量潜力，一次出
+    # DeepSeek 带审核Skill：纠错 + 语境违规 + 流量潜力，一次出（skill 按平台选）
     try:
         import llm
-        r = await llm.audit_full(text, cand)
+        r = await llm.audit_full(text, cand, platform)
     except Exception as e:
         return JSONResponse({"success": False, "message": f"DeepSeek 审核失败: {str(e)[:160]}"})
     r["platform"] = pname
@@ -121,7 +121,7 @@ async def chat_api(req: Request):
     if not msgs or not msgs[-1].get("content"):
         return JSONResponse({"success": False, "message": "内容不能为空"})
     try:
-        reply = await llm.chat(msgs, body.get("report_context", ""))
+        reply = await llm.chat(msgs, body.get("report_context", ""), body.get("platform") or "douyin")
         return {"success": True, "data": {"reply": reply}}
     except Exception as e:
         return JSONResponse({"success": False, "message": f"DeepSeek 调用失败: {str(e)[:160]}"})
