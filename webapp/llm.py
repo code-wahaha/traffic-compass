@@ -2,7 +2,8 @@
 import os
 import json as _json
 import httpx
-from config import DEEPSEEK_KEY, DEEPSEEK_HOST, DEEPSEEK_MODEL
+import config
+from config import DEEPSEEK_HOST, DEEPSEEK_MODEL
 
 _SKILL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "audit_skill.md")
 
@@ -24,12 +25,18 @@ async def audit_full(text: str, candidates=None) -> dict:
         "temperature": 0.3, "stream": False,
         "response_format": {"type": "json_object"},
     }
-    async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as c:
-        r = await c.post(f"https://{DEEPSEEK_HOST}/chat/completions",
-                         headers={"Authorization": f"Bearer {DEEPSEEK_KEY}", "Content-Type": "application/json"},
-                         json=payload)
-        r.raise_for_status()
-        return _json.loads(r.json()["choices"][0]["message"]["content"])
+    last_err = None
+    for attempt in range(2):  # DeepSeek 偶发超时/坏JSON，自动重试一次
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as c:
+                r = await c.post(f"https://{DEEPSEEK_HOST}/chat/completions",
+                                 headers={"Authorization": f"Bearer {config.get_key('deepseek')}", "Content-Type": "application/json"},
+                                 json=payload)
+                r.raise_for_status()
+                return _json.loads(r.json()["choices"][0]["message"]["content"])
+        except Exception as e:
+            last_err = e
+    raise last_err
 
 SYSTEM = """你是「抖音作品合规与运营助手」。用户发抖音视频前用你做自查与优化。已知抖音规则要点：
 
@@ -65,7 +72,7 @@ async def assess_content(text: str) -> dict:
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=15.0)) as c:
             r = await c.post(f"https://{DEEPSEEK_HOST}/chat/completions",
-                             headers={"Authorization": f"Bearer {DEEPSEEK_KEY}", "Content-Type": "application/json"},
+                             headers={"Authorization": f"Bearer {config.get_key('deepseek')}", "Content-Type": "application/json"},
                              json=payload)
             r.raise_for_status()
             d = _json.loads(r.json()["choices"][0]["message"]["content"])
@@ -80,6 +87,42 @@ async def assess_content(text: str) -> dict:
         return {}
 
 
+PREDICT_SYS = """你是短视频流量盲预测引擎。基于文案质量和账号情况，预测这条视频发布后的表现——用「相对账号基准播放量的倍数桶」表达，不给绝对数字。
+
+五个桶（相对该账号近期播放中位数的倍数）：
+"<0.3x"=扑了 / "0.3-1x"=低于日常 / "1-3x"=正常到小爆 / "3-10x"=爆款 / ">10x"=现象级
+
+规则：
+1. 只看文案本身的传播力（钩子、收藏价值、情绪、话题分享安全度）和账号赛道匹配度；
+2. 概率分布必须覆盖全部5桶且加和=100，这是逼你诚实——绝不允许把某桶写0%以外还漏桶；
+3. 校准样本少（<3）时分布必须更平（单桶最高不超过45），别装有把握；样本多可以更尖；
+4. reason 一句话说清最主要的加分项和最大的天花板。
+
+严格只输出 JSON：
+{"bucket": "1-3x",
+ "dist": {"<0.3x": 10, "0.3-1x": 25, "1-3x": 40, "3-10x": 20, ">10x": 5},
+ "reason": "钩子具体+有收藏点，但话题偏窄限制转发上限"}"""
+
+
+async def predict_blind(text: str, account: dict) -> dict:
+    """盲预测：文案 + 账号档案 → 比率桶 + 概率分布 + 一句话理由。"""
+    user = (f"账号情况：赛道={account.get('track') or '未知'}，"
+            f"近期播放中位数={account.get('baseline_median')}，"
+            f"已校准样本数={account.get('calib_samples', 0)}\n\n"
+            f"文案：\n{(text or '')[:3000]}")
+    payload = {"model": DEEPSEEK_MODEL,
+               "messages": [{"role": "system", "content": PREDICT_SYS},
+                            {"role": "user", "content": user}],
+               "temperature": 0.3, "stream": False,
+               "response_format": {"type": "json_object"}}
+    async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as c:
+        r = await c.post(f"https://{DEEPSEEK_HOST}/chat/completions",
+                         headers={"Authorization": f"Bearer {config.get_key('deepseek')}", "Content-Type": "application/json"},
+                         json=payload)
+        r.raise_for_status()
+        return _json.loads(r.json()["choices"][0]["message"]["content"])
+
+
 async def chat(messages: list, report_context: str = "") -> str:
     msgs = [{"role": "system", "content": SYSTEM}]
     if report_context:
@@ -88,7 +131,7 @@ async def chat(messages: list, report_context: str = "") -> str:
     payload = {"model": DEEPSEEK_MODEL, "messages": msgs, "temperature": 0.6, "stream": False}
     async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as c:
         r = await c.post(f"https://{DEEPSEEK_HOST}/chat/completions",
-                         headers={"Authorization": f"Bearer {DEEPSEEK_KEY}", "Content-Type": "application/json"},
+                         headers={"Authorization": f"Bearer {config.get_key('deepseek')}", "Content-Type": "application/json"},
                          json=payload)
         r.raise_for_status()
         return r.json()["choices"][0]["message"]["content"]

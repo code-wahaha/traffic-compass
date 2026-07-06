@@ -1,37 +1,27 @@
-# 流量罗盘 · Web 应用
+# 抖音作品自查网页（webapp）
 
-FastAPI 后端 + 单文件聊天前端。发抖音前：粘贴文案 → 查违规 + 流量潜力评分 + 追问改写。
-（完整说明见仓库根目录 [README](../README.md)。）
+发布前体检：粘贴文案/链接 → 查违规 + 预测播放表现。深色聊天窗口，底部下拉选平台（抖音可用，其余即将支持）。
 
-## 运行
+## 目录
+- `static/index.html` 前端（单文件聊天 UI）
+- `app.py` 后端（FastAPI）：`/api/platforms`、`/api/audit`、`/api/extract`(占位)
+- `engine.py` 通用引擎：违禁词匹配 + 防误杀 + 预测三段式
+- `rules/douyin.json` 抖音规则包（**加平台 = 仿此再放一个 json**）
+- 记录写到 `../records/records.jsonl`
 
+## 本地运行
 ```bash
-pip install -r requirements.txt
-
-# 配置 DeepSeek Key（二选一）
-cp _data/apikeys.example.json _data/apikeys.json   # 编辑填入 deepseek key
-# 或：export DEEPSEEK_KEY=你的密钥
-
+pip install fastapi "uvicorn[standard]"
+cd "F:\Vibe Coding\抖音监察\webapp"
 python app.py
-# → http://127.0.0.1:8900
+# 打开 http://127.0.0.1:8900
 ```
 
-## 接口
+## 路线
+- v1（当前）：文字版，代码引擎，无需密钥即可跑。
+- v2：接 DeepSeek V4 Flash 做语境/润色；`/api/extract` 接百炼ASR + Pixlix母版 douyin_parser（链接→文字）。
+- v3：部署阿里云 8.218.32.133 + Pixlix-Hub 登录发码。
 
-| 路由 | 说明 |
-|---|---|
-| `POST /api/audit` | 文案审核：纠错 + 违规清单 + 流量潜力评分（核心） |
-| `POST /api/chat` | 带报告上下文追问 / 改写 |
-| `POST /api/extract` | 可选：抖音链接 → 文字（需 cookie + 百炼 key；`DISABLE_EXTRACT=1` 可关闭） |
-| `GET /api/platforms` | 平台列表（抖音可用，其余占位） |
-
-## 文件
-
-- `app.py` 路由 · `llm.py` DeepSeek 调用 · `engine.py` 规则引擎
-- `audit_skill.md` ⭐审核大脑（改规则改这里）
-- `rules/douyin.json` 抖音规则包 · `static/index.html` 前端
-- 运行记录写到 `../records/records.jsonl`（回填真实播放量可校准评分）
-
-## 部署提示
-
-生产环境用 `uvicorn app:app --host 127.0.0.1 --port 8900` + 反向代理（DeepSeek 审核耗时 7~37s，反代 `proxy_read_timeout` 建议 ≥180s）。**上线务必加登录/限流**，否则任何人都能调用、消耗你的 API key。
+## 加新平台（如小红书）
+1. 喂规则 → 仿 `rules/douyin.json` 写 `rules/xiaohongshu.json`（设 `enabled:true`）。
+2. 前端下拉自动出现并可选，无需改代码。

@@ -1,6 +1,6 @@
 """抖音自查网页产品 —— 后端 (FastAPI)
 v1 文字版：/api/audit 走代码引擎(确定性，无需密钥即可跑)。
-/api/extract 抖音链接→文字(playwright 抓直链 + 百炼ASR，可选)；DeepSeek 语境审核。
+后续接：/api/extract 抖音链接→文字(复用 Pixlix 母版 douyin_parser + 百炼ASR)；DeepSeek 语境润色。
 """
 import os, json, datetime
 from fastapi import FastAPI, Request
@@ -89,7 +89,18 @@ async def audit(req: Request):
 async def extract_api(req: Request):
     """抖音链接 → 文字：playwright 抓直链 + 百炼 paraformer-v2 ASR。"""
     if os.getenv("DISABLE_EXTRACT"):
-        return JSONResponse({"success": False, "message": "链接提取暂未开放，请直接粘贴视频文案自查（提取功能即将上线）。"})
+        relay = os.getenv("EXTRACT_RELAY", "")
+        body0 = await req.json()
+        url0 = (body0.get("share_url") or body0.get("url") or "").strip()
+        if relay and url0:
+            import httpx
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=10.0)) as c:
+                    r = await c.post(relay, json={"share_url": url0})
+                    return JSONResponse(r.json())
+            except Exception as e:
+                return JSONResponse({"success": False, "message": f"云端提取服务暂不可用（{str(e)[:60]}），请先把视频文案直接粘进来自查。"})
+        return JSONResponse({"success": False, "message": "链接提取暂不可用，请把视频文案直接粘进来自查。"})
     import extract as _ext
     body = await req.json()
     url = (body.get("share_url") or body.get("url") or "").strip()
@@ -114,6 +125,169 @@ async def chat_api(req: Request):
         return {"success": True, "data": {"reply": reply}}
     except Exception as e:
         return JSONResponse({"success": False, "message": f"DeepSeek 调用失败: {str(e)[:160]}"})
+
+
+# ==================== v2 预测校准闭环 ====================
+import db
+
+
+@app.get("/api/accounts")
+def accounts_list():
+    return {"success": True, "data": db.list_accounts()}
+
+
+@app.post("/api/accounts")
+async def accounts_create(req: Request):
+    b = await req.json()
+    name = (b.get("name") or "").strip()
+    try:
+        baseline = int(b.get("baseline_median") or 0)
+    except (TypeError, ValueError):
+        baseline = 0
+    if not name or baseline <= 0:
+        return JSONResponse({"success": False, "message": "账号昵称和近期播放中位数必填（中位数>0）"})
+    aid = db.create_account(name, b.get("platform") or "douyin", b.get("track") or "", baseline)
+    return {"success": True, "data": db.get_account(aid)}
+
+
+@app.post("/api/predict")
+async def predict(req: Request):
+    """盲预测：写入即锁定。必须在发布前调用（发布后补预测=作弊，直接拒绝）。"""
+    b = await req.json()
+    text = (b.get("text") or "").strip()
+    account_id = b.get("account_id")
+    if not text or not account_id:
+        return JSONResponse({"success": False, "message": "text 和 account_id 必填"})
+    if b.get("already_published"):
+        return JSONResponse({"success": False, "message": "该作品已发布，不能补预测（盲预测原则：预测必须在看到数据之前）"})
+    acc = db.get_account(account_id)
+    if not acc:
+        return JSONResponse({"success": False, "message": "账号不存在，请先创建账号档案"})
+    import llm
+    try:
+        p = await llm.predict_blind(text, acc)
+        w = db.create_work(account_id, text, b.get("audit"), p["bucket"], p["dist"], p.get("reason", ""))
+    except Exception as e:
+        return JSONResponse({"success": False, "message": f"预测失败: {str(e)[:160]}"})
+    return {"success": True, "data": w}
+
+
+@app.post("/api/publish")
+async def publish(req: Request):
+    b = await req.json()
+    try:
+        w = db.mark_published(b.get("work_id") or "", (b.get("video_url") or "").strip())
+        return {"success": True, "data": w}
+    except ValueError as e:
+        return JSONResponse({"success": False, "message": str(e)})
+
+
+@app.get("/api/works")
+def works(account_id: int | None = None):
+    return {"success": True, "data": db.list_works(account_id)}
+
+
+@app.post("/api/retro/{work_id}")
+async def retro_api(work_id: str, req: Request):
+    b = await req.json()
+    try:
+        plays = int(b.get("plays"))
+    except (TypeError, ValueError):
+        return JSONResponse({"success": False, "message": "实际播放数必填"})
+    def _i(k):
+        try: return int(b.get(k))
+        except (TypeError, ValueError): return None
+    try:
+        w = db.retro(work_id, plays, _i("likes"), _i("comments"), _i("shares"))
+        return {"success": True, "data": w}
+    except ValueError as e:
+        return JSONResponse({"success": False, "message": str(e)})
+
+
+@app.get("/api/report/{work_id}")
+def report_api(work_id: str):
+    w = db.report(work_id)
+    if not w:
+        return JSONResponse({"success": False, "message": "作品不存在"})
+    return {"success": True, "data": w}
+
+
+@app.get("/api/chatlog")
+def chatlog_get(frame: str = "pre"):
+    return {"success": True, "data": db.get_msgs(frame)}
+
+
+@app.post("/api/chatlog")
+async def chatlog_add(req: Request):
+    b = await req.json()
+    if not b.get("html"):
+        return JSONResponse({"success": False, "message": "html 必填"})
+    db.add_msg(b.get("frame") or "pre", b.get("role") or "bot", b["html"])
+    return {"success": True}
+
+
+@app.delete("/api/chatlog")
+def chatlog_clear(frame: str = "pre"):
+    db.clear_msgs(frame)
+    return {"success": True}
+
+
+@app.get("/api/settings")
+def settings_get():
+    import config
+    return {"success": True, "data": {"deepseek": bool(config.get_key("deepseek")),
+                                      "bailian": bool(config.get_key("bailian"))}}
+
+
+@app.post("/api/settings")
+async def settings_set(req: Request):
+    import config
+    b = await req.json()
+    saved = []
+    for k in ("deepseek", "bailian"):
+        if (b.get(k) or "").strip():
+            config.save_key(k, b[k]); saved.append(k)
+    if not saved:
+        return JSONResponse({"success": False, "message": "没有可保存的 key"})
+    return {"success": True, "data": saved}
+
+
+@app.get("/api/export")
+def export_api(format: str = "csv"):
+    from fastapi.responses import Response
+    import io, csv
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+    if format == "json":
+        data = json.dumps(db.export_full(), ensure_ascii=False, indent=1)
+        return Response(content=data, media_type="application/json",
+                        headers={"Content-Disposition": f'attachment; filename="luopan_backup_{ts}.json"'})
+    rows = db.export_rows()
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["预测时间", "账号", "内容摘要", "预测桶", "预计播放", "状态", "发布时间",
+                "实际播放", "点赞", "评论", "转发", "偏差%", "命中", "复盘时间", "预测理由"])
+    STATUS = {"predicted": "待发布", "published": "已发布", "retroed": "已复盘"}
+    for r in rows:
+        dev = "" if r["deviation_pct"] is None else round(r["deviation_pct"] * 100)
+        hit = "" if r["hit_bucket"] is None else ("命中" if r["hit_bucket"] else "未中")
+        w.writerow([r["predicted_at"], r.get("account_name") or "",
+                    (r["text_snapshot"] or "")[:60].replace("\n", " "),
+                    r["pred_bucket"], r["pred_center"], STATUS.get(r["status"], r["status"]),
+                    r["published_at"] or "",
+                    r["actual_plays"] if r["actual_plays"] is not None else "",
+                    r["actual_likes"] or "", r["actual_comments"] or "", r["actual_shares"] or "",
+                    dev, hit, r["retro_at"] or "", (r["pred_reason"] or "").replace("\n", " ")])
+    return Response(content="﻿" + buf.getvalue(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="luopan_ledger_{ts}.csv"'})
+
+
+@app.post("/api/reset")
+async def reset_all(req: Request):
+    b = await req.json()
+    if b.get("confirm") != "重置":
+        return JSONResponse({"success": False, "message": "需要 confirm='重置' 确认"})
+    db.reset_all()
+    return {"success": True}
 
 
 @app.get("/")

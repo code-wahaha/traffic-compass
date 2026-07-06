@@ -1,11 +1,14 @@
-"""抖音链接 → 文字（提取链路），自包含：
-  1) playwright 登录态浏览器抓 douyinvod CDN 直链（需自备抖音 cookie）
+"""抖音链接 → 文字（提取链路）
+复刻 Pixlix 母版 douyin_parser + bailian_api 的核心逻辑，自包含：
+  1) playwright 登录态浏览器抓 douyinvod CDN 直链（cookie 复用母版）
   2) 百炼 paraformer-v2 异步 ASR 把直链转文字
 """
 import asyncio, json, os, re, time, urllib.request
-from config import BAILIAN_KEY, BAILIAN_ASR_MODEL, COOKIE_BASE_DIR
+import config
+from config import BAILIAN_ASR_MODEL, PIXLIX_MUBAN_DIR
 
-CHROME_DATA = os.path.join(COOKIE_BASE_DIR, "chrome_data")
+# 优先环境变量（服务器/异机部署用），否则用母版目录（本机）
+CHROME_DATA = os.getenv("DOUYIN_CHROME_DATA") or os.path.join(PIXLIX_MUBAN_DIR, "chrome_data")
 COOKIE_JSON = os.path.join(CHROME_DATA, "douyin_cookies.json")
 MOBILE_UA = ("Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) "
              "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 "
@@ -128,27 +131,46 @@ def _fetch_text(url):
 
 
 def _transcribe(file_url):
-    import dashscope
-    from dashscope.audio.asr import Transcription
-    dashscope.api_key = BAILIAN_KEY
-    task = Transcription.async_call(model=BAILIAN_ASR_MODEL, file_urls=[file_url], language_hints=["zh"])
-    if task.status_code != 200:
+    """百炼 paraformer 异步 ASR——直接走 REST（不用 dashscope SDK：其加密依赖在打包环境会崩）。"""
+    key = config.get_key("bailian")  # 运行时取，界面里刚填的 key 立即生效
+    if not key:
+        print("[extract] 百炼 key 未配置", flush=True)
         return ""
-    tid = task.output.task_id
+    try:
+        req = urllib.request.Request(
+            "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription",
+            data=json.dumps({
+                "model": BAILIAN_ASR_MODEL,
+                "input": {"file_urls": [file_url]},
+                "parameters": {"language_hints": ["zh"]},
+            }).encode("utf-8"),
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json",
+                     "X-DashScope-Async": "enable"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            task = json.loads(r.read().decode("utf-8"))
+        tid = (task.get("output") or {}).get("task_id", "")
+    except Exception as e:
+        print(f"[extract] ASR 提交失败: {e}", flush=True)
+        return ""
+    if not tid:
+        return ""
     for _ in range(90):
         time.sleep(2)
-        res = Transcription.fetch(task=tid)
-        st = res.output.task_status
-        if st == "SUCCEEDED":
-            try:
-                results = res.output.get("results", [])
+        try:
+            q = urllib.request.Request(f"https://dashscope.aliyuncs.com/api/v1/tasks/{tid}",
+                                       headers={"Authorization": f"Bearer {key}"})
+            with urllib.request.urlopen(q, timeout=15) as r:
+                res = json.loads(r.read().decode("utf-8"))
+            st = (res.get("output") or {}).get("task_status", "")
+            if st == "SUCCEEDED":
+                results = (res.get("output") or {}).get("results", [])
                 if results and results[0].get("transcription_url"):
                     return _fetch_text(results[0]["transcription_url"])
-            except Exception:
-                pass
-            return ""
-        if st in ("FAILED", "CANCELED"):
-            return ""
+                return ""
+            if st in ("FAILED", "CANCELED"):
+                return ""
+        except Exception:
+            pass
     return ""
 
 

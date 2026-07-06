@@ -1,8 +1,9 @@
-# === 核心：文案审核 + 流量潜力评分（必装）===
+# v1 文字版（代码引擎）
 fastapi
 uvicorn[standard]
-httpx
 
-# === 可选：链接提取（抖音链接 → 文字），需自备抖音 cookie + 百炼 Key ===
-# dashscope
-# playwright        # 装完还需执行: playwright install chromium
+# 后续阶段再装：
+# httpx           # DeepSeek V4 Flash 语境/润色
+# dashscope       # 百炼 paraformer-v2 ASR（链接提取）
+# playwright      # 抖音登录态抓直链（链接提取）
+# yt-dlp          # 兜底音频直链

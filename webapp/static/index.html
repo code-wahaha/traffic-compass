@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>流量罗盘 · 发布前体检</title>
+<title>流量罗盘 · 发布前体检 + 发布后对账</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root{
@@ -16,16 +16,36 @@
     font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
     display:flex; flex-direction:column; align-items:center; }
   .wrap{ width:100%; max-width:860px; flex:1; display:flex; flex-direction:column;
-    padding:24px 16px 0; }
-  .hd{ text-align:center; padding:18px 0 6px; }
-  .hd h1{ font-size:20px; font-weight:600; letter-spacing:.5px; }
-  .hd p{ color:var(--dim); font-size:13px; margin-top:6px; }
+    padding:20px 16px 0; min-height:0;}
+  .hd{ text-align:center; padding:10px 0 4px;}
+  .hd h1{ font-size:20px; font-weight:600; letter-spacing:.5px;}
+  .hd p{ color:var(--dim); font-size:13px; margin-top:5px;}
 
-  #msgs{ flex:1; overflow-y:auto; padding:18px 4px 12px; display:flex; flex-direction:column; gap:16px; }
-  .msg{ max-width:92%; padding:14px 16px; border-radius:14px; font-size:14.5px; line-height:1.7; white-space:pre-wrap; word-break:break-word; }
-  .me{ align-self:flex-end; background:#243049; border:1px solid #31425f; }
-  .bot{ align-self:flex-start; background:var(--panel); border:1px solid var(--line); }
-  .empty{ color:var(--dim); text-align:center; margin:auto 0; font-size:15px; }
+  /* tabs */
+  .tabs{ display:flex; gap:8px; justify-content:center; margin:14px 0 10px;}
+  .tab{ padding:9px 18px; border-radius:12px; font-size:14px; cursor:pointer; user-select:none;
+    background:var(--panel); border:1px solid var(--line); color:var(--dim); position:relative;}
+  .tab.on{ background:#20293f; border-color:#31425f; color:var(--text); font-weight:600;}
+  .tab .dot{ display:none; width:8px; height:8px; border-radius:50%; background:var(--high);
+    position:absolute; top:-3px; right:-3px;}
+  .tab.due .dot{ display:block;}
+  .clearbar{ display:flex; justify-content:flex-end; margin-bottom:4px;}
+  .clearbtn{ background:none; border:none; color:#5a5a62; font-size:12px; cursor:pointer; padding:4px 6px;}
+  .clearbtn:hover{ color:var(--high);}
+
+  .view{ flex:1; display:none; flex-direction:column; min-height:0;}
+  .view.on{ display:flex;}
+
+  #msgs{ flex:1; overflow-y:auto; padding:8px 4px 12px; display:flex; flex-direction:column; gap:16px;}
+  .msg{ max-width:92%; padding:14px 16px; border-radius:14px; font-size:14.5px; line-height:1.7; white-space:pre-wrap; word-break:break-word; position:relative;}
+  .copybtn{ position:absolute; top:6px; right:6px; background:#0e0e10; border:1px solid var(--line);
+    color:var(--dim); border-radius:7px; padding:2px 8px; font-size:11.5px; cursor:pointer;
+    opacity:0; transition:opacity .15s; user-select:none;}
+  .msg:hover .copybtn{ opacity:1;}
+  .copybtn:hover{ color:var(--text); border-color:var(--accent);}
+  .me{ align-self:flex-end; background:#243049; border:1px solid #31425f;}
+  .bot{ align-self:flex-start; background:var(--panel); border:1px solid var(--line);}
+  .empty{ color:var(--dim); text-align:center; margin:auto 0; font-size:15px;}
 
   /* report */
   .rep h3{ font-size:14px; margin:14px 0 8px; color:#cfd2dc; border-left:3px solid var(--accent); padding-left:8px;}
@@ -33,7 +53,7 @@
   table.hits{ width:100%; border-collapse:collapse; font-size:13px; margin:6px 0;}
   table.hits td,table.hits th{ border:1px solid var(--line); padding:6px 8px; text-align:left;}
   table.hits th{ color:var(--dim); font-weight:500;}
-  .tag{ display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; }
+  .tag{ display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px;}
   .t-high{ background:rgba(255,92,92,.15); color:var(--high);}
   .t-mid{ background:rgba(255,179,71,.15); color:var(--mid);}
   .t-low{ background:rgba(154,160,166,.15); color:var(--low);}
@@ -45,7 +65,6 @@
   .verdict{ font-weight:600; padding:8px 10px; border-radius:8px; background:var(--panel2); margin:6px 0;}
   .wl{ color:var(--ok); font-size:13px;}
   .pred .rng{ font-size:18px; font-weight:600; color:#fff;}
-  .pred .sub{ color:var(--dim); font-size:13px; margin-top:4px;}
   .disc{ color:var(--dim); font-size:12px; margin-top:8px; font-style:italic;}
   ul.weak{ margin:6px 0 0 18px; font-size:13px;}
   ul.weak li{ color:#e0b070; margin:2px 0;}
@@ -58,18 +77,17 @@
   .dimbar i{ display:block; height:100%; background:linear-gradient(90deg,#5b8cff,#33d17a);}
   .dimv{ width:26px; text-align:right; color:var(--dim);}
 
-  /* input card */
-  .inputwrap{ position:sticky; bottom:0; width:100%; padding:10px 0 22px; background:linear-gradient(transparent,var(--bg) 30%);}
+  /* input */
+  .inputwrap{ position:sticky; bottom:0; width:100%; padding:10px 0 20px; background:linear-gradient(transparent,var(--bg) 30%);}
   .card{ background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:12px 14px;}
-  textarea#in{ width:100%; background:transparent; border:none; color:var(--text); font-size:15px;
-    resize:none; outline:none; min-height:46px; max-height:180px; font-family:inherit; line-height:1.6;}
-  textarea#in::placeholder{ color:#6a6a72;}
+  textarea#in, textarea#pin{ width:100%; background:transparent; border:none; color:var(--text); font-size:15px;
+    resize:none; outline:none; min-height:46px; max-height:180px; height:46px; font-family:inherit; line-height:1.6;}
+  textarea#in::placeholder, textarea#pin::placeholder{ color:#6a6a72;}
   .row{ display:flex; align-items:center; gap:8px; margin-top:6px;}
   .spacer{ flex:1;}
   .ddwrap{ position:relative;}
   .dd{ display:flex; align-items:center; gap:6px; background:var(--panel2); border:1px solid var(--line);
     padding:6px 10px; border-radius:10px; cursor:pointer; font-size:13.5px; user-select:none;}
-  .dd .cv{ width:14px; height:14px; }
   .menu{ position:absolute; bottom:42px; left:0; background:#0e0e10; border:1px solid var(--line);
     border-radius:12px; padding:6px; min-width:180px; box-shadow:0 12px 40px rgba(0,0,0,.6); display:none;}
   .menu.open{ display:block;}
@@ -82,39 +100,120 @@
     color:var(--dim); cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center;}
   .iconbtn:hover{ color:var(--text);}
   .send{ background:var(--accent); border:none; color:#fff;}
-  .send:disabled{ opacity:.4; cursor:not-allowed;}
 
-  .params{ display:none; gap:10px 14px; flex-wrap:wrap; padding:10px 2px 2px; font-size:13px; color:var(--dim);}
-  .params.open{ display:flex;}
-  .params label{ display:flex; align-items:center; gap:5px;}
-  .params input[type=number],.params select{ background:var(--panel2); border:1px solid var(--line);
-    color:var(--text); border-radius:7px; padding:4px 7px; font-size:13px; width:88px;}
-  .params input[type=checkbox]{ accent-color:var(--accent);}
+  /* 发布后 · 对账台 */
+  #postBody{ flex:1; overflow-y:auto; padding:4px 2px 30px;}
+  .accbar{ background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:12px 16px; margin-bottom:14px; font-size:13.5px; display:flex; flex-wrap:wrap; gap:6px 18px;}
+  .accbar b{ color:#fff;}
+  .accbar .k{ color:var(--dim);}
+  .dgroup{ margin-bottom:18px;}
+  .dgroup h4{ font-size:13px; color:var(--dim); margin-bottom:8px; font-weight:500;}
+  .witem{ background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:11px 13px; margin-bottom:8px; font-size:13px;}
+  .witem .wt{ color:#cfd2dc; margin-bottom:6px; line-height:1.5;}
+  .witem .wm{ color:var(--dim); font-size:12px; margin-bottom:4px;}
+  .witem input{ background:var(--panel2); border:1px solid var(--line); color:var(--text);
+    border-radius:7px; padding:6px 8px; font-size:12.5px; width:100%; margin:3px 0;}
+  .witem .nums{ display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:4px;}
+  .btn{ background:var(--accent); border:none; color:#fff; border-radius:8px; padding:6px 12px;
+    font-size:12.5px; cursor:pointer; margin-top:6px;}
+  .btn.ghost{ background:var(--panel2); border:1px solid var(--line); color:var(--text);}
+  .btn:disabled{ opacity:.45; cursor:not-allowed;}
+  .pcard{ margin-top:6px;}
+  .pcard .lock{ display:inline-block; font-size:11.5px; color:var(--mid); border:1px solid rgba(255,179,71,.4);
+    border-radius:8px; padding:1px 8px; margin-left:8px; vertical-align:middle;}
+  .brow{ display:flex; align-items:center; gap:8px; margin:4px 0; font-size:12.5px;}
+  .bn{ width:56px; color:var(--dim); text-align:right;}
+  .bbar{ flex:1; height:14px; background:var(--panel2); border-radius:4px; overflow:hidden; position:relative;}
+  .bbar i{ display:block; height:100%; background:#3a4a6b;}
+  .brow.pick .bbar i{ background:linear-gradient(90deg,#5b8cff,#33d17a);}
+  .brow.pick .bn{ color:var(--accent); font-weight:600;}
+  .bv{ width:34px; color:var(--dim);}
+  .brow .hitmark{ position:absolute; top:-2px; bottom:-2px; width:3px; background:var(--high); border-radius:2px; left:50%;}
+  .devbig{ font-size:19px; font-weight:700; margin:8px 0 2px;}
+  .accform label{ display:block; font-size:12.5px; color:var(--dim); margin:8px 0 3px;}
+  .accform input{ width:100%; background:var(--panel2); border:1px solid var(--line);
+    color:var(--text); border-radius:8px; padding:7px 9px; font-size:13.5px;}
+  #postDetail .msg{ max-width:100%; margin-bottom:12px;}
+
+  /* 发布后 · 表格账本 */
+  .wtable{ width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:16px;}
+  .wtable th{ color:var(--dim); font-weight:500; text-align:left; padding:8px; border-bottom:1px solid var(--line); font-size:12px; white-space:nowrap;}
+  .wtable td{ padding:10px 8px; border-bottom:1px solid #1c1c1f; vertical-align:middle;}
+  .wtable tr.wrow:hover td{ background:#131316;}
+  .st{ display:inline-block; padding:2px 9px; border-radius:9px; font-size:11.5px; white-space:nowrap;}
+  .st-wait{ background:rgba(91,140,255,.12); color:var(--accent);}
+  .st-pub{ background:rgba(154,160,166,.12); color:var(--low);}
+  .st-due{ background:rgba(255,92,92,.14); color:var(--high);}
+  .st-hit{ background:rgba(51,209,122,.12); color:var(--ok);}
+  .st-miss{ background:rgba(255,179,71,.14); color:var(--mid);}
+  .wtable .sm{ color:var(--dim); font-size:11.5px; margin-top:2px;}
+  .abtn{ background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:7px; padding:4px 10px; font-size:12px; cursor:pointer; white-space:nowrap;}
+  .abtn:hover{ border-color:var(--accent);}
+  .abtn.primary{ background:var(--accent); border-color:var(--accent); color:#fff;}
+  .retroRow td{ background:#131316;}
+  .retroRow .nums{ display:flex; gap:6px; flex-wrap:wrap; align-items:center;}
+  .retroRow input{ background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:7px; padding:6px 8px; font-size:12.5px; width:104px;}
+  #postMsgs{ display:flex; flex-direction:column; gap:12px; padding:6px 2px 12px;}
+  #postMsgs .msg{ max-width:92%;}
+  .clearbar{ gap:10px;}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="hd">
     <h1>🧭 流量罗盘</h1>
-    <p>发布前体检 —— 粘文案或视频链接，一键查违规 + 测流量潜力</p>
+    <p>发布前体检预测，发布后回来对账 —— 预测准不准，有账可查</p>
   </div>
 
-  <div id="msgs"><div class="empty">选好平台，把文案粘进下面 👇</div></div>
+  <div class="tabs">
+    <div class="tab on" id="tabPre" onclick="switchTab('pre')">📝 发布前 · 体检与预测</div>
+    <div class="tab" id="tabPost" onclick="switchTab('post')">📊 发布后 · 对账与成绩<span class="dot"></span></div>
+  </div>
 
-  <div class="inputwrap">
-    <div class="card">
-      <textarea id="in" placeholder="粘贴抖音视频文案，或视频分享链接…"></textarea>
-
-
-      <div class="row">
-        <div class="ddwrap">
-          <div class="dd" id="dd"><span id="ddname">抖音</span><span style="color:var(--dim)">▾</span></div>
-          <div class="menu" id="menu"></div>
+  <!-- ============ 框架一：发布前（聊天） ============ -->
+  <div class="view on" id="view-pre">
+    <div class="clearbar"><button class="clearbtn" onclick="clearPre()">🧹 清空对话（不影响预测档案）</button></div>
+    <div id="msgs"><div class="empty">选好平台，把文案粘进下面 👇</div></div>
+    <div class="inputwrap">
+      <div class="card">
+        <textarea id="in" placeholder="粘贴抖音视频文案，或视频分享链接…"></textarea>
+        <div class="row">
+          <div class="ddwrap">
+            <div class="dd" id="dd"><span id="ddname">抖音</span><span style="color:var(--dim)">▾</span></div>
+            <div class="menu" id="menu"></div>
+          </div>
+          <button class="iconbtn" id="attachBtn" title="上传文案文件（.txt）">📎</button>
+          <input type="file" id="file" accept=".txt,.md,text/plain" style="display:none">
+          <div class="spacer"></div>
+          <button class="iconbtn send" id="send" title="发送">→</button>
         </div>
-        <button class="iconbtn" id="attachBtn" title="上传文案文件（.txt）">📎</button>
-        <input type="file" id="file" accept=".txt,.md,text/plain" style="display:none">
-        <div class="spacer"></div>
-        <button class="iconbtn send" id="send" title="发送">→</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 框架二：发布后（对账台 + 复盘教练） ============ -->
+  <div class="view" id="view-post">
+    <div class="clearbar">
+      <button class="clearbtn" style="color:#7d8aa5" onclick="location.href='/api/export?format=csv'" title="下载 CSV 表格，Excel/WPS 双击就能打开">💾 导出账本(Excel)</button>
+      <button class="clearbtn" style="color:#7d8aa5" onclick="location.href='/api/export?format=json'" title="全量数据备份，换电脑恢复用">🗂 完整备份</button>
+      <button class="clearbtn" onclick="clearPost()">🧹 清空复盘对话</button>
+      <button class="clearbtn" onclick="resetAll()">♻️ 清空全部记录</button>
+    </div>
+    <div id="postBody">
+      <div class="accbar" id="accbar" style="display:none"></div>
+      <div id="postGroups"><div class="empty" style="margin:60px 0">还没有记录。去「发布前」自查一条文案并锁定盲预测，账本从那一刻开始。</div></div>
+      <div id="postDetail"></div>
+      <div id="postMsgs"></div>
+    </div>
+    <div class="inputwrap">
+      <div class="card">
+        <textarea id="pin" placeholder="问复盘教练：为什么这条没起来？连着偏低说明什么？下一条怎么调？"></textarea>
+        <div class="row">
+          <span style="color:#5a5a62;font-size:12px">🎓 复盘教练 · 它看得到你上面的全部对账记录</span>
+          <div class="spacer"></div>
+          <button class="iconbtn send" id="psend" title="发送">→</button>
+        </div>
       </div>
     </div>
   </div>
@@ -124,21 +223,75 @@
 const $ = s => document.querySelector(s);
 let platform = "douyin", platformName = "抖音";
 let lastReportCtx = "", chatHistory = [];
+let lastAuditText = "", lastAuditData = null, currentAccount = null;
 
-// 平台下拉
-fetch("/api/platforms").then(r=>r.json()).then(j=>{
-  const menu = $("#menu");
-  menu.innerHTML = "";
-  (j.data||[]).forEach(p=>{
-    const d = document.createElement("div");
-    d.className = "mi" + (p.enabled?"":" dis") + (p.id===platform?" sel":"");
-    d.innerHTML = `<span>${p.name}</span>` + (p.enabled? (p.id===platform?'<span>✓</span>':'') : '<span class="soon">即将支持</span>');
-    if(p.enabled){ d.onclick = ()=>{ platform=p.id; platformName=p.name; $("#ddname").textContent=p.name; closeMenu(); buildMenu(j.data); }; }
-    menu.appendChild(d);
-  });
-  window._packs = j.data;
-});
-function buildMenu(data){ /* re-render selection marks */
+const b64e = s => btoa(unescape(encodeURIComponent(s||"")));
+const b64d = s => { try{ return decodeURIComponent(escape(atob(s||""))); }catch(e){ return ""; } };
+const esc = s => (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const fmtNum = n => { n=Number(n)||0; return n>=10000? (n/10000).toFixed(1).replace(/\.0$/,"")+"w" : String(n); };
+
+/* ============ tab 切换 ============ */
+function switchTab(t){
+  $("#tabPre").classList.toggle("on", t==="pre");
+  $("#tabPost").classList.toggle("on", t==="post");
+  $("#view-pre").classList.toggle("on", t==="pre");
+  $("#view-post").classList.toggle("on", t==="post");
+  if(t==="post") refreshPost();
+}
+
+/* ============ 框架一：聊天 + 记忆 ============ */
+function attachCopy(d){
+  if(d.querySelector(":scope > .copybtn")) return;
+  const b=document.createElement("button"); b.className="copybtn"; b.textContent="⧉ 复制";
+  b.onclick=e=>{
+    e.stopPropagation();
+    const c=d.cloneNode(true); c.querySelectorAll(".copybtn").forEach(x=>x.remove());
+    const text=c.innerText.trim();
+    const done=()=>{ b.textContent="✓ 已复制"; setTimeout(()=>b.textContent="⧉ 复制",1200); };
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(done).catch(()=>{ fallbackCopy(text); done(); });
+    } else { fallbackCopy(text); done(); }
+  };
+  d.appendChild(b);
+}
+function fallbackCopy(text){
+  const t=document.createElement("textarea"); t.value=text; t.style.position="fixed"; t.style.opacity="0";
+  document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove();
+}
+function add(cls, html, save){
+  const m=$("#msgs"); const e=m.querySelector(".empty"); if(e)e.remove();
+  const d=document.createElement("div"); d.className="msg "+cls; d.innerHTML=html;
+  attachCopy(d);
+  m.appendChild(d); m.scrollTop=m.scrollHeight;
+  if(save) saveMsg(cls, html);
+  return d;
+}
+function saveMsg(role, html){
+  fetch("/api/chatlog",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({frame:"pre", role, html})}).catch(()=>{});
+}
+function finishMsg(el, role, html){ el.innerHTML=html; attachCopy(el); saveMsg(role, html); }
+
+async function restoreChat(){
+  try{
+    const j=await fetch("/api/chatlog?frame=pre").then(r=>r.json());
+    if(j.success && j.data.length){
+      const m=$("#msgs"); m.innerHTML="";
+      j.data.forEach(x=>{ const d=document.createElement("div"); d.className="msg "+x.role; d.innerHTML=x.html; attachCopy(d); m.appendChild(d); });
+      m.scrollTop=m.scrollHeight;
+    }
+  }catch(e){}
+}
+async function clearPre(){
+  if(!confirm("清空「发布前」的对话记录？（作品与预测档案不受影响）")) return;
+  await fetch("/api/chatlog?frame=pre",{method:"DELETE"});
+  $("#msgs").innerHTML='<div class="empty">选好平台，把文案粘进下面 👇</div>';
+  lastReportCtx=""; chatHistory=[]; lastAuditText=""; lastAuditData=null;
+}
+
+/* ============ 平台下拉 / 附件 / 输入 ============ */
+fetch("/api/platforms").then(r=>r.json()).then(j=>{ buildMenu(j.data||[]); });
+function buildMenu(data){
   const menu=$("#menu"); menu.innerHTML="";
   data.forEach(p=>{
     const d=document.createElement("div");
@@ -152,28 +305,22 @@ const closeMenu=()=>$("#menu").classList.remove("open");
 $("#dd").onclick=e=>{e.stopPropagation();$("#menu").classList.toggle("open");};
 document.onclick=()=>closeMenu();
 $("#menu").onclick=e=>e.stopPropagation();
-
-// 附件
 $("#attachBtn").onclick=()=>$("#file").click();
 $("#file").onchange=e=>{ const f=e.target.files[0]; if(!f)return;
   const rd=new FileReader(); rd.onload=()=>{ $("#in").value=rd.result; autresize(); }; rd.readAsText(f); };
-
 const ta=$("#in");
 function autresize(){ ta.style.height="auto"; ta.style.height=Math.min(ta.scrollHeight,180)+"px"; }
 ta.addEventListener("input",autresize);
 ta.addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();go();} });
 $("#send").onclick=go;
 
-function add(cls,html){ const m=$("#msgs"); const e=document.querySelector(".empty"); if(e)e.remove();
-  const d=document.createElement("div"); d.className="msg "+cls; d.innerHTML=html; m.appendChild(d); m.scrollTop=m.scrollHeight; return d; }
-const esc=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-
+/* ============ 自查主流程 ============ */
 async function go(){
   const text=ta.value.trim(); if(!text)return;
-  add("me", esc(text));
+  add("me", esc(text), true);
   ta.value=""; autresize();
   const looksLink = /^https?:\/\//i.test(text) || /v\.douyin\.com|douyin\.com|xhslink|xiaohongshu/i.test(text);
-  const isNewWork = looksLink || !lastReportCtx || text.length>100;  // 新作品自查 vs 追问
+  const isNewWork = looksLink || !lastReportCtx || text.length>100;
   const waiting=add("bot", isNewWork? "正在分析…" : "思考中…");
   try{
     if(isNewWork){
@@ -181,23 +328,26 @@ async function go(){
       if(looksLink){
         waiting.innerHTML="🔗 正在提取视频文案（约 30~90 秒）…";
         const ex=await fetch("/api/extract",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({share_url:text})}).then(r=>r.json());
-        if(!ex.success){ waiting.innerHTML="🔗 "+esc(ex.message); return; }
+        if(!ex.success){ finishMsg(waiting,"bot","🔗 "+esc(ex.message)); return; }
         content=ex.data.text;
-        add("bot","📄 已提取文案："+esc(content.slice(0,120))+(content.length>120?"…":""));
+        add("bot","📄 已提取文案："+esc(content.slice(0,120))+(content.length>120?"…":""), true);
       }
       const j=await fetch("/api/audit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({platform, text:content})}).then(r=>r.json());
-      if(!j.success){ waiting.innerHTML="⚠️ "+esc(j.message); return; }
-      waiting.innerHTML=render(j.data);
+      if(!j.success){ finishMsg(waiting,"bot","⚠️ "+esc(j.message)); return; }
+      finishMsg(waiting,"bot",render(j.data));
       lastReportCtx=buildCtx(j.data); chatHistory=[];
-      add("bot","<span style='color:var(--dim);font-size:13px'>💬 可继续追问：「帮我把违规的改成合规版」「为什么预测这么低」「前3秒怎么改更抓人」</span>");
+      lastAuditText=content; lastAuditData=j.data;
+      const btnHtml=`<span style='color:var(--dim);font-size:13px'>💬 可继续追问改写；确定要发这版了就👇</span><br>`+
+        `<button class="btn" style="margin-top:8px" data-t="${b64e(content)}" data-a="${b64e(JSON.stringify({verdict:j.data.verdict,score:j.data.score}))}" onclick="startPredictBtn(this)">🔮 锁定盲预测（发布前）</button>`;
+      add("bot", btnHtml, true);
     } else {
       chatHistory.push({role:"user",content:text});
       const j=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:chatHistory, report_context:lastReportCtx})}).then(r=>r.json());
-      if(!j.success){ waiting.innerHTML="⚠️ "+esc(j.message); return; }
+      if(!j.success){ finishMsg(waiting,"bot","⚠️ "+esc(j.message)); return; }
       chatHistory.push({role:"assistant",content:j.data.reply});
-      waiting.innerHTML=esc(j.data.reply).replace(/\n/g,"<br>");
+      finishMsg(waiting,"bot",esc(j.data.reply).replace(/\n/g,"<br>"));
     }
-  }catch(err){ waiting.innerHTML="⚠️ 请求失败："+esc(String(err)); }
+  }catch(err){ finishMsg(waiting,"bot","⚠️ 请求失败："+esc(String(err))); }
 }
 function buildCtx(d){
   const sc=d.score||{};
@@ -208,7 +358,6 @@ function buildCtx(d){
   c+="\n亮点:"+((d.highlights||[]).join("；"))+"\n改进:"+((d.improvements||[]).join("；"));
   return c;
 }
-
 function highlight(text, violations){
   let h=esc(text||"");
   const uniq={}, rank={high:3,mid:2,low:1};
@@ -224,7 +373,6 @@ const LEVEL_COLOR={"高潜力":"#33d17a","有潜力":"#5b8cff","一般":"#ffb347
 function render(d){
   const vs=d.violations||[], sc=d.score||{}, txt=d.corrected_text||"";
   let h=`<div class="rep">`;
-  // 违规自查 —— 校正后原文标红
   h+=`<h3>📋 违规自查（${esc(d.platform||"抖音")}）</h3>`;
   h+=`<div class="annot">`+(vs.length? highlight(txt,vs) : `<span class="none">✅ 全文未命中违禁词</span>\n\n`+esc(txt))+`</div>`;
   if(vs.length){
@@ -236,7 +384,6 @@ function render(d){
     h+=`</table>`;
   } else { h+=`<div class="wl">未命中违禁词 ✅</div>`; }
   h+=`<div class="verdict">${esc(d.verdict||"")}</div>`;
-  // 流量潜力
   h+=`<h3>📈 流量潜力（仅文案维度）</h3>`;
   const lv=sc.level||"", col=LEVEL_COLOR[lv]||"#5b8cff";
   h+=`<div class="pred"><div class="rng" style="color:${col}">流量潜力 ${sc.total||0}% · ${esc(lv)}</div>`;
@@ -246,12 +393,288 @@ function render(d){
     h+=`</div>`; }
   if(sc.summary) h+=`<div class="disc">${esc(sc.summary)}</div>`;
   h+=`</div>`;
-  // 亮点 / 改进
   if((d.highlights||[]).length){ h+=`<h3>✨ 亮点</h3><ul class="good">`+d.highlights.map(x=>`<li>${esc(x)}</li>`).join("")+`</ul>`; }
   if((d.improvements||[]).length){ h+=`<h3>🔧 改进建议</h3><ul class="weak">`+d.improvements.map(x=>`<li>${esc(x)}</li>`).join("")+`</ul>`; }
   h+=`</div>`;
   return h;
 }
+
+/* ============ 盲预测 ============ */
+const BUCKETS=["<0.3x","0.3-1x","1-3x","3-10x",">10x"];
+const BUCKET_LABEL={"<0.3x":"扑了","0.3-1x":"低于日常","1-3x":"正常~小爆","3-10x":"爆款",">10x":"现象级"};
+
+async function loadAccounts(){
+  try{ const j=await fetch("/api/accounts").then(r=>r.json());
+    if(j.success && j.data.length){ currentAccount=j.data[0]; } }catch(e){}
+}
+
+function startPredictBtn(btn){
+  lastAuditText = b64d(btn.dataset.t) || lastAuditText;
+  try{ lastAuditData = JSON.parse(b64d(btn.dataset.a)) || lastAuditData; }catch(e){}
+  startPredict();
+}
+function startPredict(){
+  if(!lastAuditText){ add("bot","先自查一条文案，再锁预测。"); return; }
+  if(currentAccount){ doPredict(); return; }
+  add("bot",`<div class="accform"><b>先建账号档案（只填一次，预测基准全靠它）</b>
+    <label>账号昵称</label><input id="accName" placeholder="例：老王聊AI">
+    <label>赛道</label><input id="accTrack" placeholder="例：AI工具 / 情感 / 财经知识">
+    <label>近期播放中位数（最近10条视频播放量从小到大排，取中间那个数）</label>
+    <input id="accBase" type="number" placeholder="例：3500">
+    <button class="btn" onclick="createAccount()">创建并锁定预测</button></div>`);
+}
+async function createAccount(){
+  const name=$("#accName").value.trim(), track=$("#accTrack").value.trim(), base=$("#accBase").value;
+  const j=await fetch("/api/accounts",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({name,track,baseline_median:base,platform})}).then(r=>r.json());
+  if(!j.success){ add("bot","⚠️ "+esc(j.message)); return; }
+  currentAccount=j.data;
+  add("bot",`✅ 账号档案已建：${esc(currentAccount.name)}（基准 ${currentAccount.baseline_median}）`, true);
+  doPredict();
+}
+async function doPredict(){
+  const waiting=add("bot","🔮 盲预测计算中…");
+  try{
+    const j=await fetch("/api/predict",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({account_id:currentAccount.id, text:lastAuditText,
+        audit:{verdict:lastAuditData&&lastAuditData.verdict, score:lastAuditData&&lastAuditData.score}})}).then(r=>r.json());
+    if(!j.success){ finishMsg(waiting,"bot","⚠️ "+esc(j.message)); return; }
+    finishMsg(waiting,"bot",renderPredCard(j.data));
+  }catch(e){ finishMsg(waiting,"bot","⚠️ 预测失败："+esc(String(e))); }
+}
+function bucketBars(dist, pick, actualBucket){
+  let h="";
+  BUCKETS.forEach(b=>{
+    const v=dist[b]||0;
+    h+=`<div class="brow${b===pick?" pick":""}"><span class="bn">${b}</span>
+      <span class="bbar"><i style="width:${v}%"></i>${b===actualBucket?'<span class="hitmark"></span>':''}</span>
+      <span class="bv">${v}%</span></div>`;
+  });
+  return h;
+}
+function renderPredCard(w){
+  return `<div class="rep pcard"><h3>🔮 盲预测<span class="lock">🔒 已锁定 · 不可修改</span></h3>
+    ${bucketBars(w.pred_dist, w.pred_bucket)}
+    <div style="color:var(--dim);font-size:13px;margin-top:8px">
+    判定：<b style="color:#fff">${esc(w.pred_bucket)}（${BUCKET_LABEL[w.pred_bucket]||""}）</b>
+    · 预计播放约 <b style="color:#fff">${fmtNum(w.pred_center)}</b> · 置信度 ${esc(w.pred_confidence)}</div>
+    <div class="disc">${esc(w.pred_reason||"")}</div>
+    <div class="disc" style="margin-top:6px">发布后切到「📊 发布后」登记 → 满3天回来对账。预测已存档，赖不掉的那种。</div></div>`;
+}
+
+/* ============ 框架二：对账台（表格账本） ============ */
+let lastWorksData = null;
+
+async function refreshPost(){
+  await loadAccounts();
+  const bar=$("#accbar");
+  if(!currentAccount){
+    bar.style.display="none";
+    $("#postGroups").innerHTML='<div class="empty" style="margin:60px 0">还没有记录。去「发布前」自查一条文案并锁定盲预测，账本从那一刻开始。</div>';
+    return;
+  }
+  const j=await fetch("/api/works?account_id="+currentAccount.id).then(r=>r.json());
+  const g=j.data; lastWorksData=g;
+  const done=g.retroed||[], hits=done.filter(w=>w.hit_bucket).length;
+  bar.style.display="flex";
+  bar.innerHTML=`<span>账号 <b>${esc(currentAccount.name)}</b></span>
+    <span class="k">基准 <b>${fmtNum(currentAccount.baseline_median)}</b> × 系数 <b>${currentAccount.calib_factor}</b></span>
+    <span class="k">累计命中 <b>${hits}/${done.length}</b></span>
+    <span class="k">校准样本 <b>${currentAccount.calib_samples}</b></span>`;
+  renderTable(g);
+}
+
+function statusCell(w){
+  if(w._grp==="retro_due") return '<span class="st st-due">🔴 待复盘</span>';
+  if(w._grp==="predicted") return '<span class="st st-wait">⏳ 待发布</span>';
+  if(w._grp==="published") return `<span class="st st-pub">🕒 等3天</span><div class="sm">${esc((w.retro_due_at||"").slice(5))} 开放</div>`;
+  return w.hit_bucket? '<span class="st st-hit">✅ 命中</span>' : '<span class="st st-miss">❌ 未中</span>';
+}
+function actionCell(w){
+  if(w._grp==="retro_due") return `<button class="abtn primary" onclick="toggleRetro('${w.id}')">填数复盘</button>`;
+  if(w._grp==="predicted") return `<button class="abtn primary" onclick="doPublish('${w.id}')">✓ 我已发布</button>`;
+  if(w._grp==="published") return '<span class="sm">—</span>';
+  return `<button class="abtn" onclick="showReport('${w.id}')">对账卡</button>`;
+}
+function renderTable(g){
+  $("#tabPost").classList.toggle("due", (g.retro_due||[]).length>0);
+  const rows=[];
+  ["retro_due","predicted","published","retroed"].forEach(grp=>{
+    (g[grp]||[]).forEach(w=>{ w._grp=grp; rows.push(w); });
+  });
+  if(!rows.length){
+    $("#postGroups").innerHTML='<div class="empty" style="margin:60px 0">还没有记录。去「发布前」自查一条文案并锁定盲预测，账本从那一刻开始。</div>';
+    return;
+  }
+  let h=`<table class="wtable"><tr><th>内容</th><th>预测</th><th>实际</th><th>偏差</th><th>状态</th><th>操作</th></tr>`;
+  rows.forEach(w=>{
+    const dev = w.deviation_pct==null? "—" : (Math.round(w.deviation_pct*100)>0?"+":"")+Math.round(w.deviation_pct*100)+"%";
+    h+=`<tr class="wrow"><td style="max-width:230px">${esc(w.text_snapshot.slice(0,22))}…<div class="sm">${esc((w.predicted_at||"").slice(5,16))}</div></td>
+      <td>${esc(w.pred_bucket)}<div class="sm">约 ${fmtNum(w.pred_center)}</div></td>
+      <td>${w.actual_plays!=null? fmtNum(w.actual_plays) : "—"}</td>
+      <td>${dev}</td>
+      <td>${statusCell(w)}</td>
+      <td>${actionCell(w)}</td></tr>`;
+    if(w._grp==="retro_due") h+=`<tr class="retroRow" id="rr_${w.id}" style="display:none"><td colspan="6">
+      <div class="nums">去创作者中心抄数：
+        <input id="p_${w.id}" type="number" placeholder="播放量*">
+        <input id="l_${w.id}" type="number" placeholder="点赞">
+        <input id="c_${w.id}" type="number" placeholder="评论">
+        <input id="s_${w.id}" type="number" placeholder="转发">
+        <button class="abtn primary" onclick="doRetro('${w.id}')">提交对账</button>
+      </div></td></tr>`;
+  });
+  h+=`</table>`;
+  $("#postGroups").innerHTML=h;
+}
+function toggleRetro(id){
+  const r=$("#rr_"+id); if(r) r.style.display = r.style.display==="none"? "table-row":"none";
+}
+async function doPublish(id){
+  const url=prompt("粘贴视频链接（可留空直接确定）")||"";
+  const j=await fetch("/api/publish",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({work_id:id, video_url:url})}).then(r=>r.json());
+  if(!j.success){ alert(j.message); return; }
+  refreshPost();
+}
+async function doRetro(id){
+  const v=k=>($("#"+k+"_"+id)||{}).value;
+  if(!v("p")){ alert("播放量必填"); return; }
+  const j=await fetch("/api/retro/"+id,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({plays:v("p"),likes:v("l"),comments:v("c"),shares:v("s")})}).then(r=>r.json());
+  if(!j.success){ alert(j.message); return; }
+  await refreshPost();
+  showReport(id, j.data.calib_event);
+}
+
+/* ============ 复盘教练对话 ============ */
+let postChatHistory=[];
+
+function addPost(cls, html, save){
+  const m=$("#postMsgs");
+  const d=document.createElement("div"); d.className="msg "+cls; d.innerHTML=html;
+  attachCopy(d);
+  m.appendChild(d); d.scrollIntoView({behavior:"smooth", block:"end"});
+  if(save) fetch("/api/chatlog",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({frame:"post", role:cls, html})}).catch(()=>{});
+  return d;
+}
+function buildPostCtx(){
+  let c="你现在是「发布后复盘教练」：基于用户的预测对账记录回答为什么爆/为什么没起来、偏差趋势说明什么、下一条怎么调。直说结论，给可执行建议，别复述数据表。\n\n";
+  if(currentAccount) c+=`账号：${currentAccount.name}（赛道 ${currentAccount.track||"未知"}，基准 ${currentAccount.baseline_median} × 系数 ${currentAccount.calib_factor}，校准样本 ${currentAccount.calib_samples}）\n`;
+  if(lastWorksData){
+    const g=lastWorksData;
+    (g.retroed||[]).forEach(w=>{
+      c+=`【已复盘】${w.text_snapshot.slice(0,30)}… 预测${w.pred_bucket}(约${w.pred_center}) 实际${w.actual_plays} 偏差${Math.round((w.deviation_pct||0)*100)}% ${w.hit_bucket?"命中":"未中"} 理由:${w.pred_reason||""}\n`;
+    });
+    (g.retro_due||[]).concat(g.published||[]).forEach(w=>{ c+=`【已发布待对账】${w.text_snapshot.slice(0,30)}… 预测${w.pred_bucket}\n`; });
+    (g.predicted||[]).forEach(w=>{ c+=`【待发布】${w.text_snapshot.slice(0,30)}… 预测${w.pred_bucket}\n`; });
+  }
+  return c.slice(0, 6000);
+}
+async function postGo(){
+  const pin=$("#pin"), text=pin.value.trim(); if(!text)return;
+  if(!lastWorksData) await refreshPost();
+  addPost("me", esc(text), true);
+  pin.value="";
+  const waiting=addPost("bot","思考中…");
+  try{
+    postChatHistory.push({role:"user",content:text});
+    const j=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({messages:postChatHistory, report_context:buildPostCtx()})}).then(r=>r.json());
+    if(!j.success){ waiting.innerHTML="⚠️ "+esc(j.message); return; }
+    postChatHistory.push({role:"assistant",content:j.data.reply});
+    const html=esc(j.data.reply).replace(/\n/g,"<br>");
+    waiting.innerHTML=html;
+    fetch("/api/chatlog",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({frame:"post", role:"bot", html})}).catch(()=>{});
+  }catch(e){ waiting.innerHTML="⚠️ 请求失败："+esc(String(e)); }
+}
+$("#psend").onclick=postGo;
+$("#pin").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();postGo();} });
+$("#pin").addEventListener("input",function(){ this.style.height="auto"; this.style.height=Math.min(this.scrollHeight,180)+"px"; });
+
+async function restorePostChat(){
+  try{
+    const j=await fetch("/api/chatlog?frame=post").then(r=>r.json());
+    if(j.success && j.data.length){
+      const m=$("#postMsgs"); m.innerHTML="";
+      j.data.forEach(x=>{ const d=document.createElement("div"); d.className="msg "+x.role; d.innerHTML=x.html; attachCopy(d); m.appendChild(d); });
+    }
+  }catch(e){}
+}
+async function clearPost(){
+  if(!confirm("清空「发布后」的复盘对话？（账本数据不受影响）")) return;
+  await fetch("/api/chatlog?frame=post",{method:"DELETE"});
+  $("#postMsgs").innerHTML=""; postChatHistory=[];
+}
+async function showReport(id, calibEvent){
+  const j=await fetch("/api/report/"+id).then(r=>r.json());
+  if(!j.success){ alert(j.message); return; }
+  const w=j.data, dev=Math.round((w.deviation_pct||0)*100);
+  const ratio=(w.actual_plays||0)/Math.max(w.basis_plays||1,1);
+  let actualBucket=BUCKETS[0];
+  if(ratio>=10)actualBucket=">10x"; else if(ratio>=3)actualBucket="3-10x"; else if(ratio>=1)actualBucket="1-3x"; else if(ratio>=0.3)actualBucket="0.3-1x";
+  const col=w.hit_bucket?"var(--ok)":"var(--high)";
+  let h=`<div class="msg bot"><div class="rep pcard"><h3>📊 预测对账卡</h3>
+    <div class="wm" style="color:var(--dim);font-size:12.5px;margin-bottom:6px">${esc(w.text_snapshot.slice(0,50))}…</div>
+    ${bucketBars(w.pred_dist, w.pred_bucket, actualBucket)}
+    <div class="devbig" style="color:${col}">${w.hit_bucket?"✅ 命中 "+esc(w.pred_bucket):"❌ 实际落在 "+esc(actualBucket)}</div>
+    <div style="color:var(--dim);font-size:13px">预计 ${fmtNum(w.pred_center)} → 实际 <b style="color:#fff">${fmtNum(w.actual_plays)}</b>（偏差 ${dev>0?"+":""}${dev}%）</div>
+    <div class="disc">当时的理由：${esc(w.pred_reason||"")}</div>
+    <div class="disc">账号「${esc(w.account.name)}」累计命中 ${esc(w.account.hit_rate)} · ${esc(w.account.confidence)} · 校准系数 ${w.account.calib_factor}</div>`;
+  if(calibEvent) h+=`<div class="verdict" style="margin-top:8px">⚙️ ${esc(calibEvent.note)}</div>`;
+  h+=`</div></div>`;
+  $("#postDetail").innerHTML=h;
+  $("#postDetail").scrollIntoView({behavior:"smooth"});
+}
+async function resetAll(){
+  const word=prompt('这会删掉全部作品记录、账号档案、校准历史和对话。\n确认请输入：重置');
+  if(word!=="重置") return;
+  const j=await fetch("/api/reset",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({confirm:"重置"})}).then(r=>r.json());
+  if(!j.success){ alert(j.message); return; }
+  currentAccount=null; lastReportCtx=""; chatHistory=[]; lastAuditText=""; lastAuditData=null;
+  postChatHistory=[]; lastWorksData=null;
+  $("#msgs").innerHTML='<div class="empty">选好平台，把文案粘进下面 👇</div>';
+  $("#postDetail").innerHTML=""; $("#postMsgs").innerHTML="";
+  refreshPost();
+}
+
+/* ============ 首次运行：填 key ============ */
+async function checkSettings(){
+  try{
+    const j=await fetch("/api/settings").then(r=>r.json());
+    if(j.success && (!j.data.deepseek || !j.data.bailian)){
+      window._setCard = add("bot",`<div class="accform"><b>🔑 首次使用：先配 AI 钥匙</b>
+        <div style="color:var(--dim);font-size:12.5px;margin-top:6px;line-height:1.8">两把钥匙都只存在你自己电脑里，不会上传。<br>
+        ① <b>DeepSeek</b>（必填）—— 审核 + 预测的大脑。去 platform.deepseek.com 注册 → 创建 API Key，几块钱能用很久。<br>
+        ② <b>阿里云百炼</b>（选填）—— 粘视频链接自动提取文案用。去 bailian.console.aliyun.com 开通 → 创建 API-KEY。不填也能用，改成手动粘文案就行。</div>
+        <label>DeepSeek API Key（必填）</label><input id="setDsk" placeholder="sk- 开头的一串" value="">
+        <label>阿里云百炼 API Key（选填）</label><input id="setBlk" placeholder="sk- 开头的一串，可留空" value="">
+        <button class="btn" onclick="saveSettings()">保存并开始</button></div>`);
+    }
+  }catch(e){}
+}
+async function saveSettings(){
+  const dsk=$("#setDsk").value.trim(), blk=$("#setBlk").value.trim();
+  if(!dsk){ alert("DeepSeek key 必填"); return; }
+  const body={deepseek:dsk}; if(blk) body.bailian=blk;
+  const j=await fetch("/api/settings",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(body)}).then(r=>r.json());
+  if(!j.success){ alert(j.message); return; }
+  if(window._setCard){ window._setCard.remove(); window._setCard=null; }
+  add("bot","✅ 钥匙已保存，可以开始了：粘一段文案试试。"+(blk?"":"（百炼未填，链接提取不可用，随时可以再补）"), true);
+}
+
+/* ============ 启动 ============ */
+loadAccounts();
+restoreChat();
+restorePostChat();
+checkSettings();
+fetch("/api/works").then(r=>r.json()).then(j=>{
+  if(j.success) $("#tabPost").classList.toggle("due",(j.data.retro_due||[]).length>0);
+}).catch(()=>{});
 </script>
 </body>
 </html>
