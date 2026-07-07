@@ -11,9 +11,18 @@ import time
 # 本机/有抖音登录态的机器开箱即用；没有浏览器组件或登录态的机器会收到清晰的降级提示。
 
 if getattr(sys, "frozen", False):
-    # 打包后的 playwright 会到包内部找浏览器——指回系统的 ms-playwright 目录
-    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH",
-                          os.path.join(os.environ.get("LOCALAPPDATA", ""), "ms-playwright"))
+    # playwright 浏览器定位（发行版关键）：
+    #   ① 包内自带 .local-browsers（发行包把 chromium 拷进去了）→ 清掉环境变量走默认查找
+    #   ② 没自带 → 指回系统 ms-playwright（作者/开发机）
+    #   ③ 都没有 → 提取功能自然降级提示，不影响其他功能
+    _meipass = getattr(sys, "_MEIPASS", os.path.join(os.path.dirname(sys.executable), "_internal"))
+    _bundled = os.path.join(_meipass, "playwright", "driver", "package", ".local-browsers")
+    if os.path.isdir(_bundled) and os.listdir(_bundled):
+        os.environ.pop("PLAYWRIGHT_BROWSERS_PATH", None)
+    else:
+        _syspw = os.path.join(os.environ.get("LOCALAPPDATA", ""), "ms-playwright")
+        if os.path.isdir(_syspw):
+            os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", _syspw)
     # windowed 模式下 stdout/stderr 是空句柄：playwright 起子进程会失败，print 也全丢。
     # 重定向到日志文件，一并解决（日志在 exe 旁 _data\app.log，排障就看它）。
     _logdir = os.path.join(os.path.dirname(sys.executable), "_data")
