@@ -100,7 +100,7 @@ async def extract_api(req: Request):
                     return JSONResponse(r.json())
             except Exception as e:
                 return JSONResponse({"success": False, "message": f"云端提取服务暂不可用（{str(e)[:60]}），请先把视频文案直接粘进来自查。"})
-        return JSONResponse({"success": False, "message": "链接提取暂不可用，请把视频文案直接粘进来自查。"})
+        return JSONResponse({"success": False, "message": "网页版不做链接提取（那需要你的抖音登录，放服务器上不安全）。贴链接请用桌面版流量罗盘；或者把视频文案直接粘进来，一样自查。"})
     import extract as _ext
     body = await req.json()
     url = (body.get("share_url") or body.get("url") or "").strip()
@@ -110,6 +110,27 @@ async def extract_api(req: Request):
         return JSONResponse(await _ext.extract_from_link(url))
     except Exception as e:
         return JSONResponse({"success": False, "message": f"提取异常: {str(e)[:150]}"})
+
+
+@app.get("/api/douyin_status")
+async def douyin_status():
+    """抖音登录态：给前端右下角小按钮显示用。"""
+    import extract as _ext
+    return JSONResponse({"success": True, "logged_in": _ext._is_logged_in()})
+
+
+@app.post("/api/douyin_login")
+async def douyin_login_api():
+    """弹本机浏览器窗口，用户扫码登录自己的抖音（桌面版专用）。"""
+    if os.getenv("DISABLE_EXTRACT"):
+        return JSONResponse({"success": False, "message": "网页版不支持，请用桌面版。"})
+    import asyncio
+    import extract as _ext
+    loop = asyncio.get_running_loop()
+    ok = await loop.run_in_executor(None, _ext.douyin_login)
+    if ok:
+        return JSONResponse({"success": True, "message": "抖音登录成功！现在贴链接就能自动提取文案了。"})
+    return JSONResponse({"success": False, "message": "没等到登录成功（超时或窗口被关了），再点一次试试。"})
 
 
 @app.post("/api/chat")

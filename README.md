@@ -55,7 +55,7 @@ python app.py
 | `DISABLE_EXTRACT` | 否 | 设 `1` 关闭链接提取，只用文字模式（无 cookie 时建议） |
 | `DOUYIN_COOKIE_BASE` | 否 | 链接提取用的抖音登录态 cookie 基目录 |
 
-> **链接提取（抖音链接 → 文字）是可选高级功能**，需自备抖音登录 cookie（放到 `<base>/chrome_data/douyin_cookies.json`）+ 百炼 Key，并安装 `dashscope` `playwright`。不配也完全不影响核心的文案自查。
+> **链接提取（抖音链接 → 文字）是可选高级功能**，需要三样：① DeepSeek Key ② 百炼 Key ③ **你自己的抖音登录**——界面右下角有「抖音登录」小按钮，点了弹出抖音页面、手机扫码即可，登录 cookie 只存在你本机 `_data/chrome_data/`，不会上传给任何人。另需安装 `playwright`（`playwright install chromium`）。不配这些也完全不影响核心的文案自查。
 
 ---
 

@@ -157,6 +157,11 @@
   #postMsgs{ display:flex; flex-direction:column; gap:12px; padding:6px 2px 12px;}
   #postMsgs .msg{ max-width:92%;}
   .clearbar{ gap:10px;}
+/* 右下角抖音登录小按钮 */
+.dychip{position:fixed;right:14px;bottom:14px;z-index:99;background:#21262d;border:1px solid #30363d;
+  color:#c9d1d9;padding:6px 13px;border-radius:16px;font-size:12px;cursor:pointer;user-select:none}
+.dychip:hover{background:#30363d}
+.dychip.ok{color:#3fb950;border-color:#2ea043;cursor:default}
 </style>
 </head>
 <body>
@@ -646,32 +651,65 @@ async function checkSettings(){
   try{
     const j=await fetch("/api/settings").then(r=>r.json());
     if(j.success && (!j.data.deepseek || !j.data.bailian)){
-      window._setCard = add("bot",`<div class="accform"><b>🔑 首次使用：先配 AI 钥匙</b>
-        <div style="color:var(--dim);font-size:12.5px;margin-top:6px;line-height:1.8">两把钥匙都只存在你自己电脑里，不会上传。<br>
+      window._setCard = add("bot",`<div class="accform"><b>🔑 首次使用：配好这三样才能用</b>
+        <div style="color:var(--dim);font-size:12.5px;margin-top:6px;line-height:1.8">钥匙和登录都只存在你自己电脑里，不会上传给任何人。<br>
         ① <b>DeepSeek</b>（必填）—— 审核 + 预测的大脑。去 platform.deepseek.com 注册 → 创建 API Key，几块钱能用很久。<br>
-        ② <b>阿里云百炼</b>（选填）—— 粘视频链接自动提取文案用。去 bailian.console.aliyun.com 开通 → 创建 API-KEY。不填也能用，改成手动粘文案就行。</div>
+        ② <b>阿里云百炼</b>（必填）—— 贴视频链接自动提取文案用。去 bailian.console.aliyun.com 开通 → 创建 API-KEY。<br>
+        ③ <b>登录你自己的抖音</b>—— 点下面的按钮会弹出抖音页面，用你手机上的抖音扫码。提取视频要用它。</div>
         <label>DeepSeek API Key（必填）</label><input id="setDsk" placeholder="sk- 开头的一串" value="">
-        <label>阿里云百炼 API Key（选填）</label><input id="setBlk" placeholder="sk- 开头的一串，可留空" value="">
-        <button class="btn" onclick="saveSettings()">保存并开始</button></div>`);
+        <label>阿里云百炼 API Key（必填）</label><input id="setBlk" placeholder="sk- 开头的一串" value="">
+        <button class="btn" onclick="saveSettings()">保存钥匙</button>
+        <button class="btn" onclick="douyinLogin(this)">③ 登录我的抖音（弹窗扫码）</button></div>`);
     }
   }catch(e){}
 }
 async function saveSettings(){
   const dsk=$("#setDsk").value.trim(), blk=$("#setBlk").value.trim();
   if(!dsk){ alert("DeepSeek key 必填"); return; }
-  const body={deepseek:dsk}; if(blk) body.bailian=blk;
+  if(!blk){ alert("百炼 key 也是必填的（贴链接提取文案要用它）"); return; }
+  const body={deepseek:dsk, bailian:blk};
   const j=await fetch("/api/settings",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify(body)}).then(r=>r.json());
   if(!j.success){ alert(j.message); return; }
   if(window._setCard){ window._setCard.remove(); window._setCard=null; }
-  add("bot","✅ 钥匙已保存，可以开始了：粘一段文案试试。"+(blk?"":"（百炼未填，链接提取不可用，随时可以再补）"), true);
+  add("bot","✅ 钥匙已保存。要是还没登抖音，点右下角「抖音」小按钮扫个码；然后贴条链接或粘段文案试试。", true);
+  refreshDouyin();
+}
+
+/* ============ 抖音登录（用户自己的号） ============ */
+async function refreshDouyin(){
+  const el=document.getElementById("dyChip"); if(!el) return;
+  try{
+    const j=await fetch("/api/douyin_status").then(r=>r.json());
+    if(j.logged_in){ el.textContent="抖音：已登录 ✓"; el.classList.add("ok"); }
+    else{ el.textContent="抖音：未登录 · 点我扫码"; el.classList.remove("ok"); }
+  }catch(e){}
+}
+async function douyinLogin(btn){
+  if(window._dyBusy) return; window._dyBusy=true;
+  if(btn) btn.disabled=true;
+  const el=document.getElementById("dyChip");
+  if(el) el.textContent="抖音：扫码窗口已弹出，拿手机扫…";
+  try{
+    const j=await fetch("/api/douyin_login",{method:"POST"}).then(r=>r.json());
+    add("bot", (j.success?"✅ ":"⚠️ ")+j.message, true);
+  }catch(e){ add("bot","⚠️ 登录流程出错："+e, true); }
+  window._dyBusy=false; if(btn) btn.disabled=false;
+  refreshDouyin();
 }
 
 /* ============ 启动 ============ */
+(function(){
+  const chip=document.createElement("div");
+  chip.id="dyChip"; chip.className="dychip"; chip.textContent="抖音：查询中…";
+  chip.onclick=()=>{ if(!chip.classList.contains("ok")) douyinLogin(null); };
+  document.body.appendChild(chip);
+})();
 loadAccounts();
 restoreChat();
 restorePostChat();
 checkSettings();
+refreshDouyin();
 fetch("/api/works").then(r=>r.json()).then(j=>{
   if(j.success) $("#tabPost").classList.toggle("due",(j.data.retro_due||[]).length>0);
 }).catch(()=>{});

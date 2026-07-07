@@ -7,9 +7,27 @@ import asyncio, json, os, re, time, urllib.request
 import config
 from config import BAILIAN_ASR_MODEL, PIXLIX_MUBAN_DIR
 
-# 优先环境变量（服务器/异机部署用），否则用母版目录（本机）
-CHROME_DATA = os.getenv("DOUYIN_CHROME_DATA") or os.path.join(PIXLIX_MUBAN_DIR, "chrome_data")
-COOKIE_JSON = os.path.join(CHROME_DATA, "douyin_cookies.json")
+# 登录态目录的取用顺序：
+#   ① 环境变量 DOUYIN_CHROME_DATA（服务器/异机部署用）
+#   ② app 本地 _data/chrome_data —— 用户在软件里扫码登录自己的抖音后存这里（发行版走这条）
+#   ③ Pixlix 母版目录 —— 作者本机的后备
+LOCAL_CHROME = os.path.join(config.DATA_DIR, "chrome_data")
+
+
+def _chrome_dir():
+    env = os.getenv("DOUYIN_CHROME_DATA")
+    if env:
+        return env
+    if os.path.isfile(os.path.join(LOCAL_CHROME, "douyin_cookies.json")):
+        return LOCAL_CHROME
+    muban = os.path.join(PIXLIX_MUBAN_DIR, "chrome_data")
+    if os.path.isfile(os.path.join(muban, "douyin_cookies.json")):
+        return muban
+    return LOCAL_CHROME
+
+
+def _cookie_json():
+    return os.path.join(_chrome_dir(), "douyin_cookies.json")
 MOBILE_UA = ("Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) "
              "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 "
              "TikTok/26.2.0 TTWebView/TikTokWebView")
@@ -28,10 +46,11 @@ def _video_id(url):
 
 
 def _is_logged_in():
-    if not os.path.isfile(COOKIE_JSON):
+    cj = _cookie_json()
+    if not os.path.isfile(cj):
         return False
     try:
-        with open(COOKIE_JSON, encoding="utf-8") as f:
+        with open(cj, encoding="utf-8") as f:
             d = {c["name"]: c["value"] for c in json.load(f)}
         return bool(d.get("uid_tt") or d.get("sessionid"))
     except Exception:
@@ -40,10 +59,48 @@ def _is_logged_in():
 
 def _load_cookies(ctx):
     try:
-        with open(COOKIE_JSON, encoding="utf-8") as f:
+        with open(_cookie_json(), encoding="utf-8") as f:
             ctx.add_cookies(json.load(f))
     except Exception:
         pass
+
+
+def douyin_login() -> bool:
+    """弹出真浏览器窗口,让用户扫码登录**自己的**抖音。
+    轮询 uid_tt/sessionid(每3秒,最长3分钟),成功后把全部 cookie
+    存到 app 本地 _data/chrome_data/douyin_cookies.json——只留在用户自己电脑上。"""
+    os.makedirs(LOCAL_CHROME, exist_ok=True)
+    ok = False
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            ctx = p.chromium.launch_persistent_context(
+                user_data_dir=LOCAL_CHROME, headless=False,
+                args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
+                viewport={"width": 1100, "height": 760}, locale="zh-CN")
+            page = ctx.pages[0] if ctx.pages else ctx.new_page()
+            try:
+                page.goto("https://www.douyin.com/", timeout=30000, wait_until="domcontentloaded")
+            except Exception:
+                pass
+            for _ in range(60):
+                try:
+                    page.wait_for_timeout(3000)
+                    d = {c["name"]: c["value"] for c in ctx.cookies()}
+                except Exception:
+                    break  # 用户把窗口关了
+                if d.get("uid_tt") or d.get("sessionid"):
+                    with open(os.path.join(LOCAL_CHROME, "douyin_cookies.json"), "w", encoding="utf-8") as f:
+                        json.dump(ctx.cookies(), f, ensure_ascii=False)
+                    ok = True
+                    break
+            try:
+                ctx.close()
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"[extract] 登录窗口异常: {e}", flush=True)
+    return ok
 
 
 def _pick_best(media):
@@ -60,7 +117,7 @@ def _resolve(short_url):
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
             ctx = p.chromium.launch_persistent_context(
-                user_data_dir=CHROME_DATA, headless=True,
+                user_data_dir=_chrome_dir(), headless=True,
                 args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
                 viewport={"width": 390, "height": 844}, user_agent=MOBILE_UA, locale="zh-CN")
             _load_cookies(ctx)
@@ -179,7 +236,7 @@ async def extract_from_link(share_url: str) -> dict:
     if not raw.startswith(("http://", "https://")):
         return {"success": False, "message": "请输入有效的视频链接（http/https 开头）或含链接的分享文案"}
     if ("douyin.com" in raw or "v.douyin.com" in raw) and not _is_logged_in():
-        return {"success": False, "message": "抖音 cookie 失效，需重新登录抖音更新登录态（母版 chrome_data）。"}
+        return {"success": False, "message": "还没登录抖音（或登录已过期）。点右下角的「抖音」小按钮，在弹出的窗口里用你自己的抖音扫码——登录只存在这台电脑上。登好再贴链接就能自动提取了；急用的话把视频文案直接粘进来也行。"}
     loop = asyncio.get_running_loop()
     media = await loop.run_in_executor(None, _resolve, raw)
     if not media:
