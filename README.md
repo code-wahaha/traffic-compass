@@ -1,5 +1,9 @@
 # 流量罗盘 · Traffic Compass
 
+<!-- yarkr:badges:start -->
+[![Indexed on Yarkr](https://api.yarkr.com/functions/v1/api/api/v1/badges/repos/code-wahaha/traffic-compass/version.svg)](https://yarkr.com/arks/code-wahaha/traffic-compass)
+<!-- yarkr:badges:end -->
+
 **中文** | [English](./README.en.md)
 
 > 抖音作品发布前的 **AI 合规自查 + 流量潜力评分** 工具。
@@ -113,3 +117,35 @@ python app.py
 ## 开源协议
 
 [MIT](./LICENSE) © code-wahaha
+
+<!-- yarkr:install:start -->
+## Install with Yarkr
+
+This repo is indexed on [Yarkr](https://yarkr.com/arks/code-wahaha/traffic-compass) as the ark [code-wahaha/traffic-compass](https://yarkr.com/arks/code-wahaha/traffic-compass), so its skills install into Claude Code, Codex, Cursor and other agent harnesses with one command.
+
+### CLI
+
+Install the whole ark, which Yarkr keeps equal to this repo:
+
+```bash
+npx yarkr-cli sync code-wahaha/traffic-compass
+```
+
+Or add individual skills:
+
+```bash
+npx yarkr-cli add skill:code-wahaha/traffic-compass/douyin-compliance
+```
+
+No Node.js? `curl -fsSL https://yarkr.com/install.sh | sh` (macOS, Linux) or `irm https://yarkr.com/install.ps1 | iex` (Windows PowerShell) installs `yarkr` as a standalone binary; then type `yarkr` in place of `npx yarkr-cli`.
+
+### MCP
+
+Connect your agent to the ark over MCP:
+
+```bash
+npx yarkr-cli mcp add code-wahaha/traffic-compass
+```
+
+Or point any MCP client at `https://api.yarkr.com/functions/v1/api/mcp/o/code-wahaha/traffic-compass`.
+<!-- yarkr:install:end -->
